@@ -4844,6 +4844,7 @@ innobase_close_connection(
 				if (trx->has_logged_persistent()) {
 					trx_disconnect_prepared(trx);
 				} else {
+					trx_rollback_for_mysql(trx);
 					trx_deregister_from_2pc(trx);
 					goto rollback_and_free;
 				}

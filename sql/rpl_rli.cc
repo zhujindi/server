@@ -35,7 +35,7 @@
 #include "sql_table.h"
 
 static int count_relay_log_space(Relay_log_info* rli);
-
+bool xa_trans_force_rollback(THD *thd);
 /**
    Current replication state (hash of last GTID executed, per replication
    domain).
@@ -2103,13 +2103,15 @@ rpl_group_info::reinit(Relay_log_info *rli)
 rpl_group_info::rpl_group_info(Relay_log_info *rli)
   : thd(0), wait_commit_sub_id(0),
     wait_commit_group_info(0), parallel_entry(0),
-    deferred_events(NULL), m_annotate_event(0), is_parallel_exec(false)
+    deferred_events(NULL), m_annotate_event(0), is_parallel_exec(false),
+    xid_pins_idx(0)
 {
   reinit(rli);
   bzero(&current_gtid, sizeof(current_gtid));
   mysql_mutex_init(key_rpl_group_info_sleep_lock, &sleep_lock,
                    MY_MUTEX_INIT_FAST);
   mysql_cond_init(key_rpl_group_info_sleep_cond, &sleep_cond, NULL);
+  current_xid.null();
 }
 
 
@@ -2230,6 +2232,14 @@ void rpl_group_info::cleanup_context(THD *thd, bool error)
 
   if (unlikely(error))
   {
+    /*Todo/fixme: does it still not hold? Sort out and optimize if does not.
+      trans_rollback above does not rollback XA transactions.
+      It could be done only after necessarily closing tables which dictates
+      the following placement.
+    */
+    if (thd->transaction.xid_state.is_explicit_XA())
+      xa_trans_force_rollback(thd);
+
     thd->mdl_context.release_transactional_locks();
 
     if (thd == rli->sql_driver_thd)

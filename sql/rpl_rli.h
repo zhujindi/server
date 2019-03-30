@@ -808,6 +808,10 @@ struct rpl_group_info
   };
   uchar killed_for_retry;
 
+  /* A store to remember xid of being completed XA */
+  XID current_xid;
+  uint32 xid_pins_idx;  /* xid pins index to use by XA competing worker */
+
   rpl_group_info(Relay_log_info *rli_);
   ~rpl_group_info();
   void reinit(Relay_log_info *rli);

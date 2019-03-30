@@ -1178,6 +1178,9 @@ Log_event* Log_event::read_log_event(const char* buf, uint event_len,
     case XID_EVENT:
       ev = new Xid_log_event(buf, fdle);
       break;
+    case XA_PREPARE_LOG_EVENT:
+      ev = new XA_prepare_log_event(buf, fdle);
+      break;
     case RAND_EVENT:
       ev = new Rand_log_event(buf, fdle);
       break;
@@ -1229,7 +1232,6 @@ Log_event* Log_event::read_log_event(const char* buf, uint event_len,
     case PREVIOUS_GTIDS_LOG_EVENT:
     case TRANSACTION_CONTEXT_EVENT:
     case VIEW_CHANGE_EVENT:
-    case XA_PREPARE_LOG_EVENT:
       ev= new Ignorable_log_event(buf, fdle,
                                   get_type_str((Log_event_type) event_type));
       break;
@@ -2066,6 +2068,7 @@ Format_description_log_event(uint8 binlog_ver, const char* server_ver)
       post_header_len[USER_VAR_EVENT-1]= USER_VAR_HEADER_LEN;
       post_header_len[FORMAT_DESCRIPTION_EVENT-1]= FORMAT_DESCRIPTION_HEADER_LEN;
       post_header_len[XID_EVENT-1]= XID_HEADER_LEN;
+      post_header_len[XA_PREPARE_LOG_EVENT-1]= XA_PREPARE_HEADER_LEN;
       post_header_len[BEGIN_LOAD_QUERY_EVENT-1]= BEGIN_LOAD_QUERY_HEADER_LEN;
       post_header_len[EXECUTE_LOAD_QUERY_EVENT-1]= EXECUTE_LOAD_QUERY_HEADER_LEN;
       /*
@@ -2556,7 +2559,7 @@ Binlog_checkpoint_log_event::Binlog_checkpoint_log_event(
 
 Gtid_log_event::Gtid_log_event(const char *buf, uint event_len,
                const Format_description_log_event *description_event)
-  : Log_event(buf, description_event), seq_no(0), commit_id(0)
+  : Log_event(buf, description_event), seq_no(0), commit_id(0), xid_pins_idx(0)
 {
   uint8 header_size= description_event->common_header_len;
   uint8 post_header_len= description_event->post_header_len[GTID_EVENT-1];
@@ -2569,7 +2572,7 @@ Gtid_log_event::Gtid_log_event(const char *buf, uint event_len,
   buf+= 8;
   domain_id= uint4korr(buf);
   buf+= 4;
-  flags2= *buf;
+  flags2= *(buf++);
   if (flags2 & FL_GROUP_COMMIT_ID)
   {
     if (event_len < (uint)header_size + GTID_HEADER_LEN + 2)
@@ -2577,8 +2580,24 @@ Gtid_log_event::Gtid_log_event(const char *buf, uint event_len,
       seq_no= 0;                                // So is_valid() returns false
       return;
     }
-    ++buf;
     commit_id= uint8korr(buf);
+    buf+= 8;
+  }
+  if (flags2 & (FL_PREPARED_XA | FL_COMPLETED_XA))
+  {
+    uint32 temp= 0;
+
+    memcpy(&temp, buf, sizeof(temp));
+    xid.formatID= uint4korr(&temp);
+    buf += sizeof(temp);
+
+    xid.gtrid_length= (long) buf[0];
+    xid.bqual_length= (long) buf[1];
+    buf+= 2;
+
+    long data_length= xid.bqual_length + xid.gtrid_length;
+    memcpy(xid.data, buf, data_length);
+    buf+= data_length;
   }
 }
 
@@ -2764,12 +2783,42 @@ Rand_log_event::Rand_log_event(const char* buf,
 Xid_log_event::
 Xid_log_event(const char* buf,
               const Format_description_log_event *description_event)
-  :Log_event(buf, description_event)
+  :Xid_apply_log_event(buf, description_event)
 {
   /* The Post-Header is empty. The Variable Data part begins immediately. */
   buf+= description_event->common_header_len +
     description_event->post_header_len[XID_EVENT-1];
   memcpy((char*) &xid, buf, sizeof(xid));
+}
+
+/**************************************************************************
+  XA_prepare_log_event methods
+**************************************************************************/
+XA_prepare_log_event::
+XA_prepare_log_event(const char* buf,
+                     const Format_description_log_event *description_event)
+  :Xid_apply_log_event(buf, description_event)
+{
+  uint32 temp= 0;
+  uint8 temp_byte;
+
+  buf+= description_event->common_header_len +
+    description_event->post_header_len[XA_PREPARE_LOG_EVENT-1];
+  memcpy(&temp_byte, buf, 1);
+  one_phase= (bool) temp_byte;
+  buf += sizeof(temp_byte);
+  memcpy(&temp, buf, sizeof(temp));
+  m_xid.formatID= uint4korr(&temp);
+  buf += sizeof(temp);
+  memcpy(&temp, buf, sizeof(temp));
+  m_xid.gtrid_length= uint4korr(&temp);
+  buf += sizeof(temp);
+  memcpy(&temp, buf, sizeof(temp));
+  m_xid.bqual_length= uint4korr(&temp);
+  buf += sizeof(temp);
+  memcpy(m_xid.data, buf, m_xid.gtrid_length + m_xid.bqual_length);
+
+  xid= NULL;
 }
 
 
