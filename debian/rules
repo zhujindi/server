@@ -38,13 +38,6 @@ ifeq (32,$(DEB_HOST_ARCH_BITS))
     CMAKEFLAGS += -DWITHOUT_ROCKSDB=true
 endif
 
-# Skip TokuDB if arch is not amd64 (also disable for kfreebsd-amd64 as it FTBFS)
-# Skipped on the x32 ABI too; untested, but unlikely to work given i386 is not
-# supported.
-ifneq ($(DEB_HOST_ARCH),amd64)
-    CMAKEFLAGS += -DWITHOUT_TOKUDB=true
-endif
-
 # Disable jemalloc on mips* due to #843926
 ifneq (,$(filter $(DEB_HOST_ARCH), mips mipsel mips64 mips64el))
     CMAKEFLAGS += -DWITH_JEMALLOC=no
@@ -122,11 +115,6 @@ endif
 
 	# make install
 	cd $(BUILDDIR) && $(MAKE) install DESTDIR=$(TMP)
-
-	# Delete runnable files we don't want to have in the test data package.
-	# This avoids triggering multiple Lintian errors.
-	rm -rf $(TMP)/usr/share/mysql/mysql-test/plugin/tokudb/tokudb/*.py
-	rm -rf $(TMP)/usr/share/mysql/mysql-test/plugin/tokudb/tokudb/t/*.py
 
 	# nm numeric soft is not enough, therefore extra sort in command
 	# to satisfy Debian reproducible build requirements

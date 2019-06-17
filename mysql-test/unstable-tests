@@ -543,10 +543,6 @@ roles.create_and_grant_role                                        : MDEV-11772 
 
 #-----------------------------------------------------------------------
 
-rpl-tokudb.*                                                       : MDEV-14354 - Tests fail with tcmalloc
-
-rpl-tokudb.rpl_tokudb_commit_after_flush                           : MDEV-16966 - Server crash
-
 rpl.last_insert_id                                                 : MDEV-10625 - warnings in error log
 rpl.rpl_15867                                                      : Added in 10.3.9
 rpl.rpl_auto_increment                                             : MDEV-10417 - Fails on Mips
@@ -685,63 +681,6 @@ sys_vars.slow_query_log_func                                       : MDEV-14273 
 sys_vars.thread_cache_size_func                                    : MDEV-11775 - Wrong result
 sys_vars.wait_timeout_func                                         : MDEV-12896 - Wrong result
 sys_vars.wsrep_start_position_basic                                : Modified in 10.3.10
-
-#-----------------------------------------------------------------------
-
-tokudb.*                                                           : suite.pm and massive modifications in 10.3.10
-
-tokudb.change_column_all_1000_10                                   : MDEV-12640 - Lost connection
-tokudb.change_column_bin                                           : MDEV-12640 - Lost connection
-tokudb.change_column_char                                          : MDEV-12822 - Lost connection
-tokudb.cluster_filter                                              : MDEV-10678 - Wrong execution plan
-tokudb.cluster_filter_hidden                                       : MDEV-10678 - Wrong execution plan
-tokudb.cluster_filter_unpack_varchar                               : MDEV-10636 - Wrong execution plan
-tokudb.dir_per_db                                                  : MDEV-11537 - Wrong result
-tokudb.dir_per_db_rename_to_nonexisting_schema                     : MDEV-14359 - Directory not empty
-tokudb.hotindex-del-0                                              : MDEV-16559 - Timeout
-tokudb.hotindex-insert-0                                           : MDEV-15271 - Timeout
-tokudb.hotindex-insert-1                                           : MDEV-13870 - Lost connection to MySQL server
-tokudb.hotindex-insert-2                                           : MDEV-15271 - Timeout
-tokudb.hotindex-insert-bigchar                                     : MDEV-12640 - Crash
-tokudb.hotindex-update-0                                           : MDEV-15198 - Timeout
-tokudb.hotindex-update-1                                           : MDEV-12640 - Crash
-tokudb.locks-select-update-1                                       : MDEV-13406 - Lock wait timeout
-tokudb.rows-32m-rand-insert                                        : MDEV-12640 - Crash
-tokudb.rows-32m-seq-insert                                         : MDEV-12640 - Crash
-tokudb.savepoint-5                                                 : MDEV-15280 - Wrong result
-tokudb.type_datetime                                               : MDEV-15193 - Wrong result
-
-#-----------------------------------------------------------------------
-
-tokudb_alter_table.hcad_all_add2                                   : MDEV-15269 - Timeout
-
-#-----------------------------------------------------------------------
-
-tokudb_backup.*                                                    : MDEV-11001 - Missing include file
-
-#-----------------------------------------------------------------------
-
-tokudb_bugs.alter_table_comment_rebuild_data                       : Added in 10.1.36
-tokudb_bugs.checkpoint_lock                                        : MDEV-10637 - Wrong processlist output
-tokudb_bugs.checkpoint_lock_3                                      : MDEV-10637 - Wrong processlist output
-tokudb_bugs.frm_store                                              : MDEV-12823 - Valgrind
-tokudb_bugs.frm_store2                                             : MDEV-12823 - Valgrind
-tokudb_bugs.frm_store3                                             : MDEV-12823 - Valgrind
-tokudb_bugs.PS-3773                                                : Added in 10.1.36
-tokudb_bugs.xa                                                     : MDEV-11804 - Lock wait timeout
-tokudb_bugs.xa-3                                                   : MDEV-16953 - Corrupt log record found
-
-#-----------------------------------------------------------------------
-
-tokudb_parts.partition_alter4_tokudb                               : MDEV-12640 - Lost connection
-
-#-----------------------------------------------------------------------
-
-tokudb_rpl.*                                                       : MDEV-11001 - Missing include file
-
-#-----------------------------------------------------------------------
-
-tokudb_sys_vars.*                                                  : MDEV-11001 - Missing include file
 
 #-----------------------------------------------------------------------
 

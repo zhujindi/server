@@ -25,8 +25,8 @@ then
   # Don't build the test package at all to save time and disk space
   sed 's|DINSTALL_MYSQLTESTDIR=share/mysql/mysql-test|DINSTALL_MYSQLTESTDIR=false|' -i debian/rules
 
-  # Also skip building RocksDB and TokuDB to save even more time and disk space
-  sed 's|-DDEB|-DPLUGIN_TOKUDB=NO -DPLUGIN_MROONGA=NO -DPLUGIN_ROCKSDB=NO -DPLUGIN_SPIDER=NO -DPLUGIN_OQGRAPH=NO -DPLUGIN_PERFSCHEMA=NO -DPLUGIN_SPHINX=NO -WITH_EMBEDDED_SERVER=OFF -DDEB|' -i debian/rules
+  # Also skip building RocksDB to save even more time and disk space
+  sed 's|-DDEB|-DPLUGIN_MROONGA=NO -DPLUGIN_ROCKSDB=NO -DPLUGIN_SPIDER=NO -DPLUGIN_OQGRAPH=NO -DPLUGIN_PERFSCHEMA=NO -DPLUGIN_SPHINX=NO -WITH_EMBEDDED_SERVER=OFF -DDEB|' -i debian/rules
 fi
 
 # Convert gcc version to numberical value. Format is Mmmpp where M is Major
@@ -80,16 +80,6 @@ then
   sed '/libzstd1/d' -i debian/control
 fi
 
-# The binaries should be fully hardened by default. However TokuDB compilation seems to fail on
-# Debian Jessie and older and on Ubuntu Xenial and older with the following error message:
-#   /usr/bin/ld.bfd.real: /tmp/ccOIwjFo.ltrans0.ltrans.o: relocation R_X86_64_PC32 against symbol
-#   `toku_product_name_strings' can not be used when making a shared object; recompile with -fPIC
-# Therefore we need to disable PIE on those releases using gcc as proxy for detection.
-if [[ $GCCVERSION -lt 60000 ]]
-then
-  sed 's/hardening=+all$/hardening=+all,-pie/' -i debian/rules
-fi
-
 # Don't build rocksdb package if gcc version is less than 4.8 or we are running on
 # x86 32 bit.
 if [[ $GCCVERSION -lt 40800 ]] || [[ $(arch) =~ i[346]86 ]] || [[ $TRAVIS ]]
@@ -106,10 +96,9 @@ then
   sed '/Package: mariadb-plugin-cassandra/,/^$/d' -i debian/control
 fi
 
-# Mroonga, TokuDB never built on Travis CI anyway, see build flags above
+# Mroonga never built on Travis CI anyway, see build flags above
 if [[ $TRAVIS ]]
 then
-  sed -i -e "/Package: mariadb-plugin-tokudb/,/^$/d" debian/control
   sed -i -e "/Package: mariadb-plugin-mroonga/,/^$/d" debian/control
   sed -i -e "/Package: mariadb-plugin-spider/,/^$/d" debian/control
   sed -i -e "/Package: mariadb-plugin-oqgraph/,/^$/d" debian/control
