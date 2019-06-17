@@ -233,7 +233,7 @@ void opt_trace_disable_if_no_tables_access(THD *thd, TABLE_LIST *tbl)
     return;
   Opt_trace_context *const trace= &thd->opt_trace;
 
-  if (!thd->trace_started())
+  if (likely(!thd->trace_started()))
     return;
 
   Security_context *const backup_thd_sctx= thd->security_context();
@@ -522,8 +522,11 @@ Opt_trace_start::Opt_trace_start(THD *thd, TABLE_LIST *tbl,
                thd->variables.optimizer_trace_max_mem_size);
     ctx->set_query(query, query_length, query_charset);
     traceable= TRUE;
+    thd->trace_start= TRUE;
     opt_trace_disable_if_no_tables_access(thd, tbl);
   }
+  else
+    thd->trace_start= FALSE;
 }
 
 Opt_trace_start::~Opt_trace_start()
@@ -630,6 +633,8 @@ void Json_writer::add_table_name(const TABLE *table)
 
 void add_table_scan_values_to_trace(THD *thd, JOIN_TAB *tab)
 {
+  if (likely(!thd->trace_started()))
+    return;
   Json_writer_object table_records(thd);
   table_records.add_table_name(tab);
   Json_writer_object table_rec(thd, "table_scan");
