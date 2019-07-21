@@ -1709,6 +1709,7 @@ public:
 #define SUB_STMT_TRIGGER 1
 #define SUB_STMT_FUNCTION 2
 #define SUB_STMT_STAT_TABLES 4
+#define SUB_STMT_AUTO_HIST 8
 
 
 class Sub_statement_state
@@ -3342,6 +3343,10 @@ public:
 
 #ifdef WITH_PARTITION_STORAGE_ENGINE
   partition_info *work_part_info;
+  /**
+    List of tables requiring new history partition.
+  */
+  List<TABLE_SHARE> vers_auto_part_tables;
 #endif
 
 #ifndef EMBEDDED_LIBRARY

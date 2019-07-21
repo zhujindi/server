@@ -154,3 +154,18 @@ select * from t1;
 a
 1
 drop table t1;
+#
+# MDEV-17554 Auto-create new partition for system versioned tables with history partitioned by INTERVAL/LIMIT
+#
+# Don't auto-create new partition on DELETE HISTORY:
+create or replace table t (a int) with system versioning
+partition by system_time limit 1000 auto_increment;
+delete history from t;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `a` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
+PARTITIONS 2
+drop table t;

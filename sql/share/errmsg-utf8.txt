@@ -7856,7 +7856,7 @@ ER_VERS_PERIOD_COLUMNS
         eng "PERIOD FOR SYSTEM_TIME must use columns %`s and %`s"
 
 ER_PART_WRONG_VALUE
-        eng "Wrong parameters for partitioned %`s: wrong value for '%s'"
+        eng "Wrong parameters for partitioned %`s: wrong value for %s"
 
 ER_VERS_WRONG_PARTS
         eng "Wrong partitions for %`s: must have at least one HISTORY and exactly one last CURRENT"
@@ -7950,3 +7950,5 @@ ER_LOAD_INFILE_CAPABILITY_DISABLED
         rum "Comanda folosită nu este permisă deoarece clientul sau serverul MariaDB a dezactivat această capabilitate"
 ER_NO_SECURE_TRANSPORTS_CONFIGURED
         eng "No secure transports are configured, unable to set --require_secure_transport=ON"
+WARN_VERS_HIST_PART_ERROR
+        eng "Versioned table %`s.%`s: adding HISTORY partition failed with error %u, see error log for details"
