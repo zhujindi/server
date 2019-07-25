@@ -268,7 +268,7 @@ extern unsigned long long	srv_online_max_size;
 
 /* If this flag is TRUE, then we will use the native aio of the
 OS (provided we compiled Innobase with it in), otherwise we will
-use simulated aio we build below with threads.
+use simulated aio.
 Currently we support native aio on windows and linux */
 extern my_bool	srv_use_native_aio;
 extern my_bool	srv_numa_interleave;
