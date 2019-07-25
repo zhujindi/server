@@ -304,10 +304,16 @@ void thread_pool_generic::worker_main()
   worker_data thread_var;
   task task;
 
+  if(m_worker_init_callback)
+   m_worker_init_callback();
+
   while (get_task(&thread_var, &task))
   {
     task.m_func(task.m_arg);
   }
+
+  if (m_worker_destroy_callback)
+    m_worker_destroy_callback();
 
   worker_end();
 }

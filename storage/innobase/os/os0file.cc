@@ -84,12 +84,6 @@ static tpool::thread_pool *read_pool;
 
 static Atomic_counter<int> pending_aio_writes;
 
-/** Insert buffer segment id */
-static const ulint IO_IBUF_SEGMENT = 0;
-
-/** Log segment id */
-static const ulint IO_LOG_SEGMENT = 1;
-
 /** Number of retries for partial I/O's */
 static const ulint NUM_RETRIES_ON_PARTIAL_IO = 10;
 
@@ -103,11 +97,8 @@ static ulint	os_innodb_umask = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 #else
 /** Umask for creating files */
 static ulint	os_innodb_umask	= 0;
-static HANDLE	data_completion_port;
-static HANDLE	log_completion_port;
 
 static DWORD	fls_sync_io  = FLS_OUT_OF_INDEXES;
-#define IOCP_SHUTDOWN_KEY (ULONG_PTR)-1
 #endif /* _WIN32 */
 
 
@@ -4091,6 +4082,16 @@ static bool is_linux_native_aio_supported()
 #endif
 
 
+static void thread_pool_thread_init()
+{
+	pfs_register_thread(thread_pool_thread_key);
+}
+
+static void thread_pool_thread_destroy()
+{
+	pfs_delete_thread();
+}
+
 bool os_aio_init(ulint n_reader_threads, ulint n_writer_threads, ulint)
 {
 	int max_write_events = (int)n_writer_threads * OS_AIO_N_PENDING_IOS_PER_THREAD;
@@ -4108,6 +4109,7 @@ bool os_aio_init(ulint n_reader_threads, ulint n_writer_threads, ulint)
 #endif
 
 	ret = pool->configure_aio(srv_use_native_aio, max_write_events);
+	pool->set_thread_callbacks(thread_pool_thread_init, thread_pool_thread_destroy);
 	if(ret) {
 		ut_a(srv_use_native_aio);
 		srv_use_native_aio = false;
@@ -4119,6 +4121,7 @@ bool os_aio_init(ulint n_reader_threads, ulint n_writer_threads, ulint)
 	}
 
 	read_pool = tpool::create_thread_pool_generic((int)n_reader_threads, (int)n_reader_threads);
+	read_pool->set_thread_callbacks(thread_pool_thread_init, thread_pool_thread_destroy);
 	read_pool->configure_aio(false, max_read_events);
 
 	return true;
@@ -4176,9 +4179,6 @@ os_aio_func(
 	fil_node_t*	m1,
 	void*		m2)
 {
-#ifdef WIN_ASYNC_IO
-	BOOL		ret = TRUE;
-#endif /* WIN_ASYNC_IO */
 
 	ut_ad(n > 0);
 	ut_ad((n % OS_FILE_LOG_BLOCK_SIZE) == 0);
@@ -4210,39 +4210,35 @@ os_aio_func(
 		ut_error;
 	}
 
-  compile_time_assert(sizeof(os_aio_userdata_t) <= tpool::MAX_AIO_USERDATA_LEN);
-  os_aio_userdata_t userdata{m1,type,m2};
-  //DBUG_ASSERT(!type.is_read());
+	compile_time_assert(sizeof(os_aio_userdata_t) <= tpool::MAX_AIO_USERDATA_LEN);
+	os_aio_userdata_t userdata{m1,type,m2};
 
-  tpool::aiocb cb;
-  cb.m_buffer = buf;
-  cb.m_callback = io_callback;
-  cb.m_fh = file.m_file;
-  cb.m_len = (int)n;
-  cb.m_offset = offset;
-  cb.m_opcode = type.is_read() ? tpool::AIO_PREAD : tpool::AIO_PWRITE;
-  memcpy(cb.m_userdata, &userdata, sizeof(userdata));
+	tpool::aiocb cb;
+	cb.m_buffer = buf;
+	cb.m_callback = io_callback;
+	cb.m_fh = file.m_file;
+	cb.m_len = (int)n;
+	cb.m_offset = offset;
+	cb.m_opcode = type.is_read() ? tpool::AIO_PREAD : tpool::AIO_PWRITE;
+	memcpy(cb.m_userdata, &userdata, sizeof(userdata));
 
-  tpool::thread_pool *tp;
+	tpool::thread_pool *tp;
 
-  if (cb.m_opcode == tpool::AIO_PWRITE)
-  {
-    pending_aio_writes++;
-    tp= pool;
-  }
-  else
-  {
-    // reads go to another pool, to prevent  deadlocks.
-    tp= read_pool;
-  }
+	if (cb.m_opcode == tpool::AIO_PWRITE) {
+		pending_aio_writes++;
+		tp= pool;
+	} else {
+		// reads go to another pool, to prevent  deadlocks.
+		tp= read_pool;
+	}
 
-  if (!tp->submit_io(&cb))
-    return DB_SUCCESS;
-  
-  if(cb.m_opcode == tpool::AIO_PWRITE)
-    pending_aio_writes--;
+	if (!tp->submit_io(&cb))
+		return DB_SUCCESS;
+	
+	if(cb.m_opcode == tpool::AIO_PWRITE)
+		pending_aio_writes--;
 
-  os_file_handle_error(name, type.is_read() ? "aio read" : "aio write");
+	os_file_handle_error(name, type.is_read() ? "aio read" : "aio write");
 
 	return(DB_IO_ERROR);
 }

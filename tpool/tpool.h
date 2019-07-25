@@ -110,12 +110,25 @@ extern aio *create_simulated_aio(thread_pool *tp, int max_io);
 class thread_pool
 {
 protected:
+  /* AIO hnadler */
   aio *m_aio;
-  virtual aio *create_native_aio(int max_io)= 0;
+  virtual aio* create_native_aio(int max_io) = 0;
+
+  /** 
+    Functions to be called at worker thread start/end
+    can be used for example to set some TLS variables
+  */
+  void (*m_worker_init_callback)(void);
+  void (*m_worker_destroy_callback)(void);
 
 public:
-  thread_pool() : m_aio() {}
+  thread_pool() : m_aio(),m_worker_init_callback(),m_worker_destroy_callback() {}
   virtual void submit_task(const task &t)= 0;
+  void set_thread_callbacks(void (*init)(), void (*destroy)())
+  {
+    m_worker_init_callback = init;
+    m_worker_destroy_callback = destroy;
+  }
   int configure_aio(bool use_native_aio, int max_io)
   {
     if (use_native_aio)
