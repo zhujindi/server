@@ -20,7 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111 - 1301 USA*/
 #include <assert.h>
 #include "tpool.h"
 #include <thread>
-
+#ifdef LINUX_NATIVE_AIO
+#include <libaio.h>
+#endif
 /*
   Linux AIO implementation, based on native AIO.
   Needs libaio.h and -laio at the compile time.
@@ -34,7 +36,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111 - 1301 USA*/
 namespace tpool
 {
 #ifdef LINUX_NATIVE_AIO
-#include <libaio.h>
 struct linux_iocb : iocb
 {
   aiocb m_aiocb;
@@ -64,7 +65,8 @@ class aio_linux : public aio
     for (;;)
     {
       io_event event;
-      int ret = io_getevents(aio->m_io_ctx, 1, 1, &event, nullptr);
+      struct timespec ts{0, 500000000};
+      int ret = io_getevents(aio->m_io_ctx, 1, 1, &event, &ts);
 
       if (aio->m_in_shutdown)
         break;
@@ -112,8 +114,8 @@ public:
   ~aio_linux()
   {
     m_in_shutdown = true;
-    io_destroy(m_io_ctx);
     m_getevent_thread.join();
+    io_destroy(m_io_ctx);
   }
 
   // Inherited via aio
