@@ -289,14 +289,13 @@ typedef struct st_join_table {
 
   /* TRUE <=> This join_tab is inside an SJM bush and is the last leaf tab here */
   bool          last_leaf_in_bush;
-
+  
   /*
     ptr  - this is a bush, and ptr points to description of child join_tab
            range
     NULL - this join tab has no bush children
   */
   JOIN_TAB_RANGE *bush_children;
-  JOIN_TAB_RANGE *order_nest_children;
   
   /* Special content for EXPLAIN 'Extra' column or NULL if none */
   enum explain_extra_tag info;
@@ -367,6 +366,7 @@ typedef struct st_join_table {
   uint		used_fields;
   ulong         used_fieldlength;
   ulong         max_used_fieldlength;
+  ulong         used_rec_length_for_nest;
   uint          used_blobs;
   uint          used_null_fields;
   uint          used_uneven_bit_fields;
@@ -526,8 +526,8 @@ typedef struct st_join_table {
   bool is_rowid_filter_built;
 
   /*
-    Set to true if we consider creating a nest for a prefix of the JOIN order
-    that satisfies the ordering
+    Set to true if we consider creating a nest for a prefix of the
+    join order that satisfies the ordering.
   */
   bool is_sort_nest;
 
@@ -618,6 +618,7 @@ typedef struct st_join_table {
     return tmp_select_cond;
   }
   void calc_used_field_length(bool max_fl);
+  ulong get_estimated_record_length();
   ulong get_used_fieldlength()
   {
     if (!used_fieldlength)
@@ -845,6 +846,7 @@ public:
     is_used= FALSE;
   }
 
+  /* Please review this fix */
   void set_loosescan_key(uint key)
   {
     loosescan_key= key;
@@ -1003,8 +1005,15 @@ typedef struct st_position
   /* Cost info for the range filter used at this position */
   Range_rowid_filter_cost_info *range_rowid_filter_info;
 
-  /* Flag to be set to TRUE if the join prefix satisfies the ORDER BY CLAUSE */
+  /*
+    Flag to be set to TRUE if the join prefix satisfies the ORDER BY CLAUSE
+  */
   bool sort_nest_operation_here;
+  /*
+    set to the index number which we pick for index scan
+    -1 otherwise
+  */
+  int index_no;
 
 } POSITION;
 
@@ -1522,6 +1531,18 @@ public:
   */
   bool is_orig_degenerated;
   SORT_NEST_INFO *sort_nest_info;
+  bool sort_nest_possible;
+  /*
+    Set to true if we don't want the planner to pick a plan with the sort
+    nest. This is currently used for the case when we run the join
+    optimizer once to get the output cardinality for the join.
+  */
+  bool disable_sort_nest;
+  /*
+    This is need for the sort-nest to adjust the number of records that would
+    actual be read for the nest.
+  */
+  double fraction_output_for_nest;
 
   JOIN(THD *thd_arg, List<Item> &fields_arg, ulonglong select_options_arg,
        select_result *result_arg)
@@ -1619,6 +1640,9 @@ public:
     sjm_scan_tables= 0;
     is_orig_degenerated= false;
     sort_nest_info= NULL;
+    sort_nest_possible= FALSE;
+    disable_sort_nest= FALSE;
+    fraction_output_for_nest= 1;
   }
 
   /* True if the plan guarantees that it will be returned zero or one row */
@@ -1627,9 +1651,12 @@ public:
   uint exec_join_tab_cnt() { return tables_list ? top_join_tab_count : 0; }
 
   /* TRUE if the sort-nest contains more than one table else FALSE */
-  bool sort_nest_needed() { return sort_nest_info ?
-                                   (sort_nest_info->n_tables == 1 ? FALSE : TRUE):
-                                   FALSE; }
+  bool sort_nest_needed()
+  {
+    return sort_nest_info ?
+           (sort_nest_info->n_tables == 1 ? FALSE :TRUE):
+           FALSE;
+  }
 
   /*
     Number of tables in the join which also includes the temporary tables
@@ -1780,28 +1807,39 @@ public:
 
   /*
     Sort nest is needed currently when we can shortcut the entire join.
-    So the computations that require the entire join to happen don't need the
-    sort nest, so we disable them here
+    So for the operation that require the entire join computation to be done
+    first and then applies the operation on the full join output don't need
+    the sort nest, so we disable the usage of sort nest for such operations.
 
-    Sort nest disabled for
-    1) Only constant tables in the join
-    2) DISTINCT clause
-    3) GROUP BY CLAUSE
-    4) HAVING clause (that was not pushed to where)
-    5) Aggregate Functions
-    6) Window Functions
-    7) Using Rollup
-    8) Using SQL_BUFFER_RESULT
+    Sort nest is not allowed for
+    1) ORDER clause is not present
+    2) Only constant tables in the join
+    3) DISTINCT clause
+    4) GROUP BY CLAUSE
+    5) HAVING clause (that was not pushed to where)
+    6) Aggregate Functions
+    7) Window Functions
+    8) Using Rollup
+    9) Using SQL_BUFFER_RESULT
+    10) Only Select queries can use the sort nest
+    11) LIMIT is present
+
+    Returns TRUE if sort-nest is allowed
   */
 
-  bool need_order_nest()
+  bool sort_nest_allowed()
   {
-    return ((const_tables != table_count &&
-            ((select_distinct || group_list) || having  ||
-             MY_TEST(select_options & OPTION_BUFFER_RESULT))) ||
-            (rollup.state != ROLLUP::STATE_NONE && select_distinct) ||
-            select_lex->window_specs.elements > 0 || select_lex->agg_func_used());
+    return thd->variables.use_sort_nest &&
+            !(const_tables == table_count || !order ||
+             (select_distinct || group_list) || having  ||
+             MY_TEST(select_options & OPTION_BUFFER_RESULT) ||
+             (rollup.state != ROLLUP::STATE_NONE && select_distinct) ||
+             select_lex->window_specs.elements > 0 ||
+             select_lex->agg_func_used() ||
+             select_limit == HA_POS_ERROR ||
+             thd->lex->sql_command != SQLCOM_SELECT);
   }
+  bool check_if_order_by_expensive();
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -1903,7 +1941,6 @@ bool is_indexed_agg_distinct(JOIN *join, List<Item_field> *out_args);
 bool simple_pred(Item_func *func_item, Item **args, bool *inv_order);
 int opt_sum_query(THD* thd,
                   List<TABLE_LIST> &tables, List<Item> &all_fields, COND *conds);
-double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 
 /* from sql_delete.cc, used by opt_range.cc */
 extern "C" int refpos_order_cmp(void* arg, const void *a,const void *b);
@@ -2149,12 +2186,30 @@ bool mysql_select(THD *thd,
 void free_underlaid_joins(THD *thd, SELECT_LEX *select);
 bool mysql_explain_union(THD *thd, SELECT_LEX_UNIT *unit,
                          select_result *result);
+double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order);
 bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
                                          table_map previous_tables);
+bool create_sort_nest_if_needed(JOIN *join);
 bool setup_sort_nest(JOIN *join);
 void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab);
-
+double sort_nest_oper_cost(JOIN *join, double join_record_count,
+                           ulong rec_len, uint idx);
+bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used);
+void substitute_base_with_nest_items(JOIN *join);
+void substitutions_for_sjm_lookup(JOIN *join, JOIN_TAB *sjm_tab);
+void extract_condition_for_the_nest(JOIN *join);
+void check_cond_extraction_for_nest(THD *thd, Item *cond,
+                                    Pushdown_checker checker, uchar* arg);
+int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
+                                      double *records, double cardinality,
+                                      int index_used, uint idx);
+bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab);
+bool index_satisfies_ordering(JOIN_TAB *tab, int index_used);
+bool setup_range_scan(JOIN *join, JOIN_TAB *tab, uint idx, double records);
+void setup_index_use_for_ordering(JOIN *join, int index_no);
+int get_index_on_table(JOIN_TAB *tab);
+void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
 
 /*
   General routine to change field->ptr of a NULL-terminated array of Field
@@ -2499,15 +2554,15 @@ bool instantiate_tmp_table(TABLE *table, KEY *keyinfo,
                            ulonglong options);
 bool open_tmp_table(TABLE *table);
 void setup_tmp_table_column_bitmaps(TABLE *table, uchar *bitmaps);
-double prev_record_reads(POSITION *positions, uint idx, table_map found_ref);
+double prev_record_reads(POSITION *positions, uint idx, table_map found_ref,
+                         table_map sort_nest_tables,
+                         double fraction_output_for_nest);
 void fix_list_after_tbl_changes(SELECT_LEX *new_parent, List<TABLE_LIST> *tlist);
-double get_tmp_table_lookup_cost(THD *thd, double row_count, uint row_size);
-double get_tmp_table_write_cost(THD *thd, double row_count, uint row_size);
+double get_tmp_table_lookup_cost(THD *thd, double row_count, ulong row_size);
+double get_tmp_table_write_cost(THD *thd, double row_count, ulong row_size);
 void optimize_keyuse(JOIN *join, DYNAMIC_ARRAY *keyuse_array);
 bool sort_and_filter_keyuse(THD *thd, DYNAMIC_ARRAY *keyuse,
                             bool skip_unprefixed_keyparts);
-double postjoin_oper_cost(JOIN *join, double join_record_count, uint rec_len, uint idx);
-bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used);
 
 struct st_cond_statistic
 {

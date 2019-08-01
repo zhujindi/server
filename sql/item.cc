@@ -586,7 +586,8 @@ bool Item::cleanup_processor(void *arg)
     pointer to newly allocated item is returned.
 */
 
-Item* Item::transform(THD *thd, Item_transformer transformer, uchar *arg)
+Item* Item::transform(THD *thd, Item_transformer transformer,
+                      bool transform_subquery, uchar *arg)
 {
   DBUG_ASSERT(!thd->stmt_arena->is_stmt_prepare());
 
@@ -6158,12 +6159,30 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
 }
 
 
+/*
+  Replace any Item_field object with the item in the nest table.
+  This is needed to substitute the item that are evaluated in the
+  post ORDER BY context that is when a sort-nest was created
+  and the ordering was already done.
+
+  @param arg   NULL or points to so the structure REPLACE_NEST_FIELD_ARG
+
+  @note
+    This function is supposed to be called as a callback parameter in calls
+    of the transformer method.
+
+  @return
+    - pointer to the nest items corresponding to the current item
+    - this - otherwise.
+*/
+
 Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
 {
   REPLACE_NEST_FIELD_ARG* param= (REPLACE_NEST_FIELD_ARG*)arg;
   JOIN *join= param->join;
   SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  if (!(used_tables() & sort_nest_info->nest_tables_map))
+  if (!(used_tables() & sort_nest_info->nest_tables_map) &&
+      !(used_tables() & OUTER_REF_TABLE_BIT))
     return this;
 
   List_iterator_fast<Item> li(sort_nest_info->nest_base_table_cols);
@@ -6173,7 +6192,16 @@ Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
   {
     Item *field_item= item->real_item();
     if (field->eq(((Item_field*)field_item)->field))
+    {
+      if (used_tables() == OUTER_REF_TABLE_BIT)
+      {
+        Item_field *clone_item= new (thd->mem_root) Item_field(thd, this);
+        Item *nest_item= sort_nest_info->nest_temp_table_cols.elem(index);
+        clone_item->set_field(((Item_field*)nest_item)->field);
+        return clone_item;
+      }
       return sort_nest_info->nest_temp_table_cols.elem(index);
+    }
     index++;
   }
   return this;
@@ -7985,13 +8013,15 @@ void Item_ref::cleanup()
     @retval NULL  Out of memory error
 */
 
-Item* Item_ref::transform(THD *thd, Item_transformer transformer, uchar *arg)
+Item* Item_ref::transform(THD *thd, Item_transformer transformer,
+                          bool transform_subquery,uchar *arg)
 {
   DBUG_ASSERT(!thd->stmt_arena->is_stmt_prepare());
   DBUG_ASSERT((*ref) != NULL);
 
   /* Transform the object we are referencing. */
-  Item *new_item= (*ref)->transform(thd, transformer, arg);
+  Item *new_item= (*ref)->transform(thd, transformer,
+                                    transform_subquery, arg);
   if (!new_item)
     return NULL;
 
@@ -9328,7 +9358,7 @@ table_map Item_default_value::used_tables() const
 */ 
 
 Item *Item_default_value::transform(THD *thd, Item_transformer transformer,
-                                    uchar *args)
+                                    bool transform_subquery, uchar *args)
 {
   DBUG_ASSERT(!thd->stmt_arena->is_stmt_prepare());
 
@@ -9339,7 +9369,8 @@ Item *Item_default_value::transform(THD *thd, Item_transformer transformer,
   if (!arg)
     return 0;
 
-  Item *new_item= arg->transform(thd, transformer, args);
+  Item *new_item= arg->transform(thd, transformer,
+                                 transform_subquery, args);
   if (!new_item)
     return 0;
 

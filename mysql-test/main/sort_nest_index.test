@@ -1,0 +1,239 @@
+set use_sort_nest=1;
+set @save_use_sort_nest= @@use_sort_nest;
+CREATE TABLE t1 (a int, b int, c int, KEY(a), key(b))engine=MYISAM;
+
+insert into t1 values (1,9,1), (1,8,2), (1,9,3), (1,10,4), (1,11,5), (1,12,6);
+insert into t1 values (1,4,7), (1,8,8), (1,11,9), (1,10,10), (1,11,11), (1,13,12);
+insert into t1 values (1,2,6), (1,7,14), (1,9,15), (1,10,16), (1,11,17), (1,14,18);
+insert into t1 values (1,6,19), (1,5,20);
+
+create table t2 (a int, b int, key(b))ENGINE=MYISAM;
+insert into t2 values (0,1), (0,2), (0,3), (0,4), (0,5), (0,6);
+insert into t2 values (1,7), (1,8), (1,9), (1,10), (1,11), (1,12);
+insert into t2 values (1,7), (1,8), (1,9), (1,10), (1,11), (1,13);
+
+--echo # join order picked should be t1,t2 for both the cases
+--echo # selectivity for the where clause is 100%, so we just need to read 2 records
+--echo # from table and then we get the output
+--echo # Access methods considered should be ref access bby index(a), table_scan
+--echo # and an index_scan(b) [this satisfied the ordering]
+
+explain
+select t1.a,t1.b,t1.c,t2.a,t2.b from t1, t2 where t1.a=1 and t1.c=t2.b order by t1.b limit 2;
+select t1.a,t1.b,t1.c,t2.a,t2.b from t1, t2 where t1.a=1 and t1.c=t2.b order by t1.b limit 2;
+
+--echo # same as above but the ordering for index is reversed
+explain
+select t1.a,t1.b,t1.c,t2.a,t2.b from t1, t2 where t1.a=1 and t1.c=t2.b order by t1.b desc limit 2;
+select t1.a,t1.b,t1.c,t2.a,t2.b from t1, t2 where t1.a=1 and t1.c=t2.b order by t1.b desc limit 2;
+
+drop table t1,t2;
+
+CREATE TABLE t1 (a int, b int, c int, KEY a_b (a,b), KEY a_c (a,c));
+
+insert into t1 values (0,1,0), (0,2,0), (0,3,0), (0,4,0), (0,5,0), (0,6,0);
+insert into t1 values (1,7,1), (1,8,1), (1,9,1), (1,10,1), (1,11,1), (1,12,1);
+insert into t1 values (1,7,2), (1,8,2), (1,9,2), (1,10,2), (1,11,2), (1,12,2);
+insert into t1 values (1,7,2), (1,8,2), (1,9,2), (1,10,2), (1,11,2), (1,12,2);
+
+--echo #
+--echo # index a_b should be used, no need for filesort
+--echo #
+
+let $query= select a,b,c from t1 where a=1 and c=2 order by b limit 5;
+eval explain $query;
+eval $query;
+
+let $query= select a,b,c from t1 where a=1 and c=2 order by b desc limit 5;
+eval explain $query;
+eval $query;
+drop table t1;
+
+CREATE TABLE t1 (a int, b int, c int, KEY (a), KEY (b));
+insert into t1 values (0,1,0), (0,2,0), (0,3,0), (0,4,0), (0,5,0), (0,6,0);
+insert into t1 values (1,7,1), (1,8,1), (1,9,1), (1,10,1), (1,11,2), (1,12,1);
+insert into t1 values (1,7,1), (1,8,1), (1,9,1), (1,10,2), (1,11,2), (1,12,2);
+insert into t1 values (1,7,1), (1,8,1), (1,9,1), (1,10,2), (1,11,2), (1,12,2);
+insert into t1 values (1,1,1);
+
+--echo #
+--echo # range access on key(a) should be used here
+--echo #
+
+let $query= select a,b,c from t1 where a >= 1 and b > 8 order by a limit 2;
+eval explain $query;
+eval $query;
+
+let $query= select a,b,c from t1 where a >= 1 and b > 8 order by a desc limit 2;
+eval explain $query;
+eval $query;
+drop table t1;
+
+--echo #
+--echo # Force index used to achieve ordering
+--echo #
+
+CREATE TABLE t1 (
+   id int(11) NOT NULL,
+   parent_id int(11) DEFAULT NULL,
+   name varchar(10) DEFAULT NULL,
+   PRIMARY KEY (id),
+   KEY ind_parent_id (parent_id)
+);
+
+insert into t1 (id, parent_id, name) values
+(10,NULL,'A'), (20,10,'B'), (30,10,'C'),
+(40,NULL,'D'), (50,40,'E'), (60,40,'F'),
+(70,NULL,'J');
+
+--echo This must show type=index, extra=Using where
+set use_sort_nest= 0;
+let $query= SELECT * FROM t1 FORCE INDEX (PRIMARY) WHERE parent_id IS NOT NULL ORDER BY id DESC LIMIT 1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval explain $query;
+eval $query;
+
+drop table t1;
+
+CREATE TABLE t1(
+   a int NOT NULL,
+   b char NULL,
+   PRIMARY KEY(a)
+);
+
+INSERT INTO t1 VALUES (1,'a'), (2,'b'), (3,'c'), (4,'d');
+
+--echo #
+--echo # Should use index condition
+--echo #
+
+let $query= SELECT * FROM t1
+            WHERE a BETWEEN 1 and 2
+            ORDER BY a
+            LIMIT 2;
+
+set use_sort_nest=0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval $query;
+
+--echo #
+--echo # Should not use index condition as ORDER by DESC is used
+--echo #
+
+let $query= SELECT * FROM t1
+            WHERE a BETWEEN 1 and 2
+            ORDER BY a DESC
+            LIMIT 2;
+
+set use_sort_nest= 0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval EXPLAIN $query;
+eval $query;
+
+drop table t1;
+
+set use_sort_nest= @save_use_sort_nest;
+
+create table t1(a int, b int, c int, key(a), key a_b(a,b)); # 10 rows
+insert into t1 values (0,1,0), (0,2,0), (0,3,0);
+insert into t1 values (1,6,1), (1,7,1), (1,5,1);
+insert into t1 values (2,8,2), (2,9,3), (2,10,4);
+insert into t1 values (3,1,5);
+
+create table t2(a int, b int, c int, key(b), key(c)); # 10 rows
+insert into t2 select a, b, c from t1;
+
+--echo #
+--echo # Testing using of Indexes on first non-const table
+--echo #
+
+--echo #
+--echo #  Using range scan
+--echo #
+let $query= SELECT *
+            FROM
+              t1,t2
+            WHERE
+              t1.a=2 AND t2.b > 8 AND
+              t1.b=t2.b
+            ORDER BY t1.b LIMIT 10;
+
+set use_sort_nest= 0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval EXPLAIN $query;
+eval $query;
+
+--echo #
+--echo #  Using ref access
+--echo #
+let $query= SELECT *
+            FROM
+              t1,t2
+            WHERE
+              t1.a=2 AND t2.c >= 1 AND
+              t1.b=t2.b
+            ORDER BY t1.b LIMIT 10;
+
+set use_sort_nest= 0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval EXPLAIN $query;
+eval $query;
+
+--echo #
+--echo # using index scan
+--echo #
+
+alter table t1 add key idx2(b,a);
+let $query= SELECT t1.b, t2.a, t2.b, t2.c
+            FROM
+              t1,t2
+            WHERE
+              t2.b=t1.a
+            ORDER BY t1.b LIMIT 5;
+
+set use_sort_nest= 0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval EXPLAIN $query;
+eval $query;
+
+--echo #
+--echo # Dynamic ranges not allowed with use_sort_nest=1
+--echo #
+
+let $query= SELECT *
+            FROM
+              t1,t2
+            WHERE
+              t1.a >= 2 AND t2.c >= 1 AND
+              t1.b=t2.b order by t2.c limit 5;
+
+set use_sort_nest=0;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest= 1;
+eval EXPLAIN $query;
+eval $query;
+drop table t1,t2;
+
+
+set use_sort_nest= @save_use_sort_nest;

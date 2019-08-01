@@ -604,6 +604,7 @@ typedef struct system_variables
   ulonglong group_concat_max_len;
   ulonglong default_regex_flags;
   ulonglong max_mem_used;
+  my_bool use_sort_nest;
 
   /**
      Place holders to store Multi-source variables in sys_var.cc during
@@ -6060,18 +6061,24 @@ public:
   Copy_field *copy_field; /* Needed for SJ_Materialization scan */
 };
 
+
+/*
+  Optimizer and executor structure for the materialized sort-nest. This
+  structure contains all the information required to use the sort-nest.
+*/
 class SORT_NEST_INFO : public Sql_alloc
 {
 public:
   TMP_TABLE_PARAM tmp_table_param;
   List<Item> nest_base_table_cols;
   List<Item> nest_temp_table_cols;
-  TABLE *table;
   st_join_table *nest_tab;
+  TABLE *table;
   uint n_tables;
   bool materialized; /* TRUE <=> materialization already performed */
   table_map nest_tables_map;
   Item *nest_cond;
+  int index_used;
 };
 
 
