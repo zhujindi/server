@@ -9542,8 +9542,11 @@ best_extension_by_limited_search(JOIN      *join,
 
   if (nest_created && !limit_applied_to_nest)
   {
+    Json_writer_object apply_limit(thd);
+    apply_limit.add("original_record_count", record_count);
     record_count= COST_MULT(record_count, join->fraction_output_for_nest);
     record_count= ceil(record_count);
+    apply_limit.add("record_count_after_limit_applied", record_count);
     limit_applied_to_nest= TRUE;
   }
 
@@ -9717,6 +9720,7 @@ best_extension_by_limited_search(JOIN      *join,
             ulong rec_len= cache_record_length_for_nest(join, idx);
             cost= sort_nest_oper_cost(join, partial_join_cardinality,
                                       rec_len, idx);
+            trace_one_table.add("cost_of_sorting", cost);
             current_read_time= COST_ADD(current_read_time, cost);
           }
           Json_writer_array trace_rest(thd, "rest_of_plan");
@@ -9778,6 +9782,7 @@ best_extension_by_limited_search(JOIN      *join,
             ulong rec_len= cache_record_length_for_nest(join, idx);
             cost= sort_nest_oper_cost(join, partial_join_cardinality,
                                       rec_len, idx);
+            trace_one_table.add("cost_of_sorting", cost);
           }
           else
             cost= current_record_count;
