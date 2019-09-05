@@ -4,10 +4,14 @@ insert into t0 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 create table t1 (a int, b int);
 insert into t1 select a,a from t0 where a <5; # 5 rows
 create table t2 as select * from t1 where a < 5; # 5 rows
-create table t3(a int, b int, c int);
+create table t3(a int, b int, c int, key(a));
 insert into t3 select A.a + 10*B.a, A.a + 10*B.a, A.a + 10*B.a from t0 A, t0 B; # 100 rows
 
-alter table t3 add key(a);
+--disable_result_log
+analyze table t1 persistent for all;
+analyze table t2 persistent for all;
+analyze table t3 persistent for all;
+--enable_result_log
 
 --echo #
 --echo # sort-nest(t2,t1)
@@ -22,8 +26,6 @@ let $query= SELECT t1.a, t2.b, t1.b, t3.a from t1,t2,t3
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
-
-alter table t3 drop key a;
 
 drop table t0,t1,t2,t3;
 
@@ -40,6 +42,12 @@ insert into t2(a,b) values (1,1), (2,2);
 insert into t2 select A.a + B.a* 10, A.a+B.a*10 from ten A, ten B;
 create table t3(a int, b int);
 insert into t3 select A.a + B.a* 10 + C.a * 100, A.a + B.a* 10 + C.a * 100 from ten A, ten B, ten C;
+
+--disable_result_log
+analyze table t1 persistent for all;
+analyze table t2 persistent for all;
+analyze table t3 persistent for all;
+--enable_result_log
 
 delimiter |;
 create function f1(a int) returns int
@@ -177,8 +185,8 @@ create index idx2 on t2(a);
 create index idx3 on t3(b);
 
 let $query= select * from t1,t2,t3
-            where t1.a=t2.a and t1.b = t3.a and t1.b < 5 and t3.b < 500
-            order by t2.b limit 50;
+            where t1.a=t2.a and t1.b = t3.a and t1.b < 5 and t3.b < 900
+            order by t2.b limit 5;
 
 eval explain $query;
 eval explain format=json $query;
@@ -209,6 +217,7 @@ INSERT INTO t4 VALUES (2,'x'), (1,'x');
 let $query= SELECT t.f1 as f
             FROM (SELECT DISTINCT t1.* FROM t1,t2 WHERE t2.f2 = t1.f2) t,t3,t4
             WHERE t4.f2 = t3.f2  AND t4.f2 = t.f1 ORDER BY f limit 10;
+
 
 eval explain $query;
 eval explain format=json $query;
@@ -268,6 +277,12 @@ create table t3 as select (A.a + 10*B.a+C.a*100) as a,
                           (A.a + 10*B.a+C.a*100) as b
                           from t0 A, t0 B,t0 C;
 
+--disable_result_log
+analyze table t1 persistent for all;
+analyze table t2 persistent for all;
+analyze table t3 persistent for all;
+--enable_result_log
+
 let $query= select * from t2,t1 left join t3 on t3.a=t1.b
             order by t2.a desc,t1.a desc limit 5;
 
@@ -304,6 +319,12 @@ insert into t3 select (A.a + 10*B.a+C.a*100) as a,
                        (A.a + 10*B.a+C.a*100) as b
                         from t0 A, t0 B,t0 C;
 
+--disable_result_log
+analyze table t1 persistent for all;
+analyze table t2 persistent for all;
+analyze table t3 persistent for all;
+--enable_result_log
+
 --echo # sort-nest on table t1,t2
 prepare ps1 from "explain select * from t2,t1,t3 where t3.a=t1.b+1 order by t2.a desc,t1.a desc limit 5";
 execute ps1;
@@ -334,6 +355,12 @@ insert into t1 select a,a from t0 where a <5;
 create table t2 as select * from t1 where a < 5;
 create table t3 as select (A.a + 10*B.a+C.a*100) as a, (A.a + 10*B.a+C.a*100) as b,
                           (A.a + 10*B.a+C.a*100) as c from t0 A, t0 B,t0 C; # 1000 rows
+
+--disable_result_log
+analyze table t1 persistent for all;
+analyze table t2 persistent for all;
+analyze table t3 persistent for all;
+--enable_result_log
 
 --echo #
 --echo # sort-nest(t2,t1) and independent subquery in the select list
