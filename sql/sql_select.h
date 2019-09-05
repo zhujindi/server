@@ -1840,6 +1840,8 @@ public:
              thd->lex->sql_command != SQLCOM_SELECT);
   }
   bool check_if_order_by_expensive();
+  bool estimate_cardinality(table_map remaining_tables, uint depth,
+                            uint prune_level, uint use_cond_selectivity);
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,

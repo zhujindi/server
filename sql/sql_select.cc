@@ -5523,17 +5523,6 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
   if (optimize_semijoin_nests(join, all_table_map))
     DBUG_RETURN(TRUE); /* purecov: inspected */
 
-  if (join->sort_nest_allowed() && !join->check_if_order_by_expensive())
-  {
-    DBUG_ASSERT(!join->sort_nest_possible);
-    Json_writer_temp_disable trace_order_by_limit(join->thd);
-    join->sort_nest_possible= TRUE;
-    join->disable_sort_nest= TRUE;
-    if (choose_plan(join, all_table_map & ~join->const_table_map))
-        goto error;
-    join->disable_sort_nest= FALSE;
-  }
-
   {
     double records= 1;
     SELECT_LEX_UNIT *unit= join->select_lex->master_unit();
@@ -8316,6 +8305,11 @@ choose_plan(JOIN *join, table_map join_tables)
     if (search_depth == 0)
       /* Automatically determine a reasonable value for 'search_depth' */
       search_depth= determine_search_depth(join);
+
+    if (join->estimate_cardinality(join_tables, search_depth, prune_level,
+                                   use_cond_selectivity))
+      DBUG_RETURN(TRUE);
+
     if (greedy_search(join, join_tables, search_depth, prune_level,
                       use_cond_selectivity))
       DBUG_RETURN(TRUE);
@@ -29201,6 +29195,31 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
       }
     }
   }
+}
+
+
+/*
+  @brief
+  Run the join optimizer to get the cardinality of the best join order.
+  This is currently used by the ORDER BY LIMIT optimization with the
+  sort-nest.
+*/
+
+bool JOIN::estimate_cardinality(table_map remaining_tables, uint depth,
+                                uint prune_level, uint use_cond_selectivity)
+{
+  if (sort_nest_allowed() && !check_if_order_by_expensive())
+  {
+    DBUG_ASSERT(!sort_nest_possible);
+    Json_writer_temp_disable trace_order_by_limit(thd);
+    sort_nest_possible= TRUE;
+    disable_sort_nest= TRUE;
+    if (greedy_search(this, remaining_tables, depth, prune_level,
+                      use_cond_selectivity))
+        return TRUE;
+    disable_sort_nest= FALSE;
+  }
+  return FALSE;
 }
 
 
