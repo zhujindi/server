@@ -624,6 +624,7 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
 {
   THD *thd= join->thd;
   double cost= 0;
+  set_if_bigger(join_record_count, 1);
   /*
     The sort-nest table is not created for sorting when one does sorting
     on the first non-const table. So for this case we don't need to add

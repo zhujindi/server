@@ -9545,7 +9545,6 @@ best_extension_by_limited_search(JOIN      *join,
     Json_writer_object apply_limit(thd);
     apply_limit.add("original_record_count", record_count);
     record_count= COST_MULT(record_count, join->fraction_output_for_nest);
-    record_count= ceil(record_count);
     apply_limit.add("record_count_after_limit_applied", record_count);
     limit_applied_to_nest= TRUE;
   }
