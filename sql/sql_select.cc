@@ -7762,7 +7762,7 @@ best_access_path(JOIN      *join,
         so cost of sorting needs to be added for idx2 and not for idx1
       */
       double cost_of_sorting= 0;
-      if (join->sort_nest_possible && !join->disable_sort_nest && !idx &&
+      if (join->sort_nest_possible && !idx &&
           !s->table->keys_in_use_for_order_by.is_clear_all())
       {
         double sorting_cost;
@@ -8737,24 +8737,9 @@ greedy_search(JOIN      *join,
   // ==join->tables or # tables in the sj-mat nest we're optimizing
   uint      n_tables __attribute__((unused));
 
-  /*
-    This is required by the order by limit optimization to decide where
-    to put a nest for a join prefix
-  */
   double cardinality= DBL_MAX;
-  if (!join->disable_sort_nest && join->sort_nest_possible)
-  {
-    cardinality= join->join_record_count;
-    set_if_bigger(cardinality, 1);
-    join->fraction_output_for_nest= join->select_limit < cardinality ?
-                                    (join->select_limit / cardinality) :
-                                     1.0;
-    Json_writer_object trace_cardinality(join->thd);
-    trace_cardinality.add("cardinality", cardinality);
-    trace_cardinality.add("fraction_output_for_nest",
-                          join->fraction_output_for_nest);
+  set_fraction_output_for_nest(join, &cardinality);
 
-  }
   DBUG_ENTER("greedy_search");
 
   /* number of tables that remain to be optimized */
@@ -9709,7 +9694,6 @@ best_extension_by_limited_search(JOIN      *join,
         */
         if (!nest_created && !join->emb_sjm_nest && join->order &&
             nest_allow && join->sort_nest_possible &&
-            !join->disable_sort_nest &&
             check_join_prefix_contains_ordering(join, s, sort_nest_tables))
         {
           // SORT_NEST branch
@@ -29229,11 +29213,15 @@ bool JOIN::estimate_cardinality(table_map joined_tables)
     uint use_cond_selectivity=
               thd->variables.optimizer_use_condition_selectivity;
     Json_writer_temp_disable trace_order_by_limit(thd);
-    disable_sort_nest= TRUE;
+    /*
+      This is set here to FALSE becaue we don't want greedy search to
+      consider the sort-nest while estimating the cardinality.
+    */
+    sort_nest_possible= FALSE;
     if (greedy_search(this, joined_tables, search_depth, prune_level,
                       use_cond_selectivity))
       return TRUE;
-    disable_sort_nest= FALSE;
+    sort_nest_possible= TRUE;
   }
   return FALSE;
 }

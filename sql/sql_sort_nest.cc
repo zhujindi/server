@@ -747,7 +747,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
       idx ||
       cardinality == DBL_MAX ||
       table->force_index ||
-      !(join->sort_nest_possible && !join->disable_sort_nest) ||
+      !join->sort_nest_possible ||
       table->keys_in_use_for_order_by.is_clear_all())
     return -1;
 
@@ -979,4 +979,35 @@ int get_index_on_table(JOIN_TAB *tab)
     idx= tab->select->quick->index;
 
   return idx;
+}
+
+/*
+  @brief
+    Calculate the selectivity of limit.
+
+  @description
+    The selectivity that we get is used to make an estimate of rows
+    that we would read from the partial join of the tables inside the
+    sort-nest.
+  @param
+    join                      the join handler
+    cardinality[out]          set the output cardinality of the join
+*/
+
+void set_fraction_output_for_nest(JOIN *join, double *cardinality)
+{
+  if (join->sort_nest_possible)
+  {
+    double total_rows= join->join_record_count;
+    set_if_bigger(total_rows, 1);
+    *cardinality= total_rows;
+    join->fraction_output_for_nest= join->select_limit < total_rows ?
+                                    (join->select_limit / total_rows) :
+                                     1.0;
+    Json_writer_object trace_cardinality(join->thd);
+    trace_cardinality.add("cardinality", total_rows);
+    trace_cardinality.add("selectivity_of_limit",
+                          join->fraction_output_for_nest*100);
+
+  }
 }

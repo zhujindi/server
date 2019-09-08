@@ -1537,14 +1537,8 @@ public:
     sort-nest.It caches the value that tells if the join optimizer
     should consider using a sort-nest or not.
   */
-
   bool sort_nest_possible;
-  /*
-    Set to true if we don't want the planner to pick a plan with the sort
-    nest. This is currently used for the case when we run the join
-    optimizer once to get the output cardinality for the join.
-  */
-  bool disable_sort_nest;
+
   /*
     This is need for the sort-nest to adjust the number of records that would
     actual be read for the nest.
@@ -1648,7 +1642,6 @@ public:
     is_orig_degenerated= false;
     sort_nest_info= NULL;
     sort_nest_possible= FALSE;
-    disable_sort_nest= FALSE;
     fraction_output_for_nest= 1;
   }
 
@@ -2218,6 +2211,7 @@ bool setup_range_scan(JOIN *join, JOIN_TAB *tab, uint idx, double records);
 void setup_index_use_for_ordering(JOIN *join, int index_no);
 int get_index_on_table(JOIN_TAB *tab);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
+void set_fraction_output_for_nest(JOIN *join, double *cardinality);
 
 /*
   General routine to change field->ptr of a NULL-terminated array of Field
