@@ -1531,6 +1531,13 @@ public:
   */
   bool is_orig_degenerated;
   SORT_NEST_INFO *sort_nest_info;
+
+  /*
+    Set to TRUE if the query can use order by limit optimization with
+    sort-nest.It caches the value that tells if the join optimizer
+    should consider using a sort-nest or not.
+  */
+
   bool sort_nest_possible;
   /*
     Set to true if we don't want the planner to pick a plan with the sort
@@ -1839,9 +1846,8 @@ public:
              select_limit == HA_POS_ERROR ||
              thd->lex->sql_command != SQLCOM_SELECT);
   }
-  bool check_if_order_by_expensive();
-  bool estimate_cardinality(table_map remaining_tables, uint depth,
-                            uint prune_level, uint use_cond_selectivity);
+  bool is_order_by_expensive();
+  bool estimate_cardinality(table_map joined_tables);
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,

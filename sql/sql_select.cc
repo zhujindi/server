@@ -2816,7 +2816,7 @@ int JOIN::optimize_stage2()
 
     if (order && !need_tmp)
     {
-      if (check_if_order_by_expensive())
+      if (is_order_by_expensive())
       {
         need_tmp=1;
         simple_order=simple_group=0;
@@ -5320,6 +5320,9 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
     }
   }
 
+  if (join->sort_nest_allowed() && !join->is_order_by_expensive())
+    join->sort_nest_possible= TRUE;
+
   (void)propagate_equal_field_for_orderby(join, join->order);
   /*
     Here a call is made to remove the constant from the order by clause,
@@ -7760,7 +7763,6 @@ best_access_path(JOIN      *join,
       */
       double cost_of_sorting= 0;
       if (join->sort_nest_possible && !join->disable_sort_nest && !idx &&
-          join->sort_nest_allowed() &&
           !s->table->keys_in_use_for_order_by.is_clear_all())
       {
         double sorting_cost;
@@ -8306,8 +8308,7 @@ choose_plan(JOIN *join, table_map join_tables)
       /* Automatically determine a reasonable value for 'search_depth' */
       search_depth= determine_search_depth(join);
 
-    if (join->estimate_cardinality(join_tables, search_depth, prune_level,
-                                   use_cond_selectivity))
+    if (join->estimate_cardinality(join_tables))
       DBUG_RETURN(TRUE);
 
     if (greedy_search(join, join_tables, search_depth, prune_level,
@@ -8741,7 +8742,7 @@ greedy_search(JOIN      *join,
     to put a nest for a join prefix
   */
   double cardinality= DBL_MAX;
-  if (!join->disable_sort_nest && join->sort_nest_allowed())
+  if (!join->disable_sort_nest && join->sort_nest_possible)
   {
     cardinality= join->join_record_count;
     set_if_bigger(cardinality, 1);
@@ -9594,7 +9595,7 @@ best_extension_by_limited_search(JOIN      *join,
         sort_nest_operation_here is set when we check if ordering is achieved
         in the sort-nest branch of best_extension_by_limited_search.
       */
-      if (!idx && join->sort_nest_allowed() &&
+      if (!idx && join->sort_nest_possible &&
           index_satisfies_ordering(s, index_used))
       {
         if (s->table->force_index)
@@ -9696,7 +9697,7 @@ best_extension_by_limited_search(JOIN      *join,
         swap_variables(JOIN_TAB*, join->best_ref[idx], *pos);
         bool nest_allow= (join->cur_sj_inner_tables == 0 &&
                           join->cur_embedding_map == 0);
-        if (!idx && join->sort_nest_allowed() &&
+        if (!idx && join->sort_nest_possible &&
             index_satisfies_ordering(s, index_used))
           limit_applied_to_nest= TRUE;
 
@@ -9768,7 +9769,7 @@ best_extension_by_limited_search(JOIN      *join,
             ((join->sort_by_table &&
               join->sort_by_table !=
               join->positions[join->const_tables].table->table) ||
-              join->sort_nest_allowed()))
+              join->sort_nest_possible))
         {
           /*
              We may have to make a temp table, note that this is only a
@@ -9776,7 +9777,7 @@ best_extension_by_limited_search(JOIN      *join,
              Hence it may be wrong.
           */
           double cost;
-          if (join->sort_nest_allowed())
+          if (join->sort_nest_possible)
           {
             ulong rec_len= cache_record_length_for_nest(join, idx);
             cost= sort_nest_oper_cost(join, partial_join_cardinality,
@@ -29146,7 +29147,7 @@ select_handler *SELECT_LEX::find_select_handler(THD *thd)
 }
 
 
-bool JOIN::check_if_order_by_expensive()
+bool JOIN::is_order_by_expensive()
 {
   /*
     Force using of tmp table if sorting by a SP or UDF function due to
@@ -29204,23 +29205,34 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
 
 /*
   @brief
-  Run the join optimizer to get the cardinality of the best join order.
-  This is currently used by the ORDER BY LIMIT optimization with the
-  sort-nest.
+   Estimate the best cardinality for a set of tables.
+
+  @description
+    Run the join optimizer to get the cardinality of the best join order.
+    This is currently used by the ORDER BY LIMIT optimization with the
+    sort-nest.
+
+  @param
+    joined_tables            map of all the tables to be joined
+
+  @retval
+    TRUE         error
+    FALSE        otherwise
 */
 
-bool JOIN::estimate_cardinality(table_map remaining_tables, uint depth,
-                                uint prune_level, uint use_cond_selectivity)
+bool JOIN::estimate_cardinality(table_map joined_tables)
 {
-  if (sort_nest_allowed() && !check_if_order_by_expensive())
+  if (sort_nest_possible)
   {
-    DBUG_ASSERT(!sort_nest_possible);
+    uint search_depth= thd->variables.optimizer_search_depth;
+    uint prune_level=  thd->variables.optimizer_prune_level;
+    uint use_cond_selectivity=
+              thd->variables.optimizer_use_condition_selectivity;
     Json_writer_temp_disable trace_order_by_limit(thd);
-    sort_nest_possible= TRUE;
     disable_sort_nest= TRUE;
-    if (greedy_search(this, remaining_tables, depth, prune_level,
+    if (greedy_search(this, joined_tables, search_depth, prune_level,
                       use_cond_selectivity))
-        return TRUE;
+      return TRUE;
     disable_sort_nest= FALSE;
   }
   return FALSE;

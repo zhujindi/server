@@ -353,7 +353,7 @@ check_cond_extraction_for_nest(THD *thd, Item *cond,
 
 void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order)
 {
-  if (!join->sort_nest_allowed())
+  if (!join->sort_nest_possible)
     return;
   ORDER *order;
   for (order= first_order; order; order= order->next)
@@ -668,7 +668,7 @@ double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables)
 
 void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab)
 {
-  if (!join->sort_nest_allowed())
+  if (!join->sort_nest_possible)
     return;
   TABLE* table= tab->table;
   key_map keys_with_ordering;
