@@ -1540,6 +1540,11 @@ public:
   bool sort_nest_possible;
 
   /*
+    SET to TRUE when we want to get the estimate of cardianlity for a join
+  */
+  bool get_cardinality_estimate;
+
+  /*
     This is need for the sort-nest to adjust the number of records that would
     actual be read for the nest.
   */

@@ -7762,7 +7762,7 @@ best_access_path(JOIN      *join,
         so cost of sorting needs to be added for idx2 and not for idx1
       */
       double cost_of_sorting= 0;
-      if (join->sort_nest_possible && !idx &&
+      if (join->sort_nest_possible && !idx && !join->get_cardinality_estimate &&
           !s->table->keys_in_use_for_order_by.is_clear_all())
       {
         double sorting_cost;
@@ -8308,7 +8308,7 @@ choose_plan(JOIN *join, table_map join_tables)
       /* Automatically determine a reasonable value for 'search_depth' */
       search_depth= determine_search_depth(join);
 
-    if (join->estimate_cardinality(join_tables))
+    if (join->sort_nest_possible && join->estimate_cardinality(join_tables))
       DBUG_RETURN(TRUE);
 
     if (greedy_search(join, join_tables, search_depth, prune_level,
@@ -9580,7 +9580,7 @@ best_extension_by_limited_search(JOIN      *join,
         sort_nest_operation_here is set when we check if ordering is achieved
         in the sort-nest branch of best_extension_by_limited_search.
       */
-      if (!idx && join->sort_nest_possible &&
+      if (!idx && join->sort_nest_possible && join->get_cardinality_estimate &&
           index_satisfies_ordering(s, index_used))
       {
         if (s->table->force_index)
@@ -9683,6 +9683,7 @@ best_extension_by_limited_search(JOIN      *join,
         bool nest_allow= (join->cur_sj_inner_tables == 0 &&
                           join->cur_embedding_map == 0);
         if (!idx && join->sort_nest_possible &&
+            !join->get_cardinality_estimate &&
             index_satisfies_ordering(s, index_used))
           limit_applied_to_nest= TRUE;
 
@@ -9694,6 +9695,7 @@ best_extension_by_limited_search(JOIN      *join,
         */
         if (!nest_created && !join->emb_sjm_nest && join->order &&
             nest_allow && join->sort_nest_possible &&
+            !join->get_cardinality_estimate &&
             check_join_prefix_contains_ordering(join, s, sort_nest_tables))
         {
           // SORT_NEST branch
@@ -29189,10 +29191,15 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
 
 /*
   @brief
-   Estimate the best cardinality for a set of tables.
+   Estimate the cardinality of a join
 
-  @description
-    Run the join optimizer to get the cardinality of the best join order.
+  @param
+    joined_tables            map of all the non-const tables of the join
+
+  @details
+    Run the join optimizer to get the estimate of cardinality for a join.
+
+  @note
     This is currently used by the ORDER BY LIMIT optimization with the
     sort-nest.
 
@@ -29206,23 +29213,29 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
 
 bool JOIN::estimate_cardinality(table_map joined_tables)
 {
-  if (sort_nest_possible)
-  {
-    uint search_depth= thd->variables.optimizer_search_depth;
-    uint prune_level=  thd->variables.optimizer_prune_level;
-    uint use_cond_selectivity=
-              thd->variables.optimizer_use_condition_selectivity;
-    Json_writer_temp_disable trace_order_by_limit(thd);
-    /*
-      This is set here to FALSE becaue we don't want greedy search to
-      consider the sort-nest while estimating the cardinality.
-    */
-    sort_nest_possible= FALSE;
-    if (greedy_search(this, joined_tables, search_depth, prune_level,
-                      use_cond_selectivity))
-      return TRUE;
-    sort_nest_possible= TRUE;
-  }
+  Json_writer_temp_disable disable_tracing(thd);
+  uint search_depth= thd->variables.optimizer_search_depth;
+  if (search_depth == 0)
+    search_depth= determine_search_depth(this);
+  uint prune_level=  thd->variables.optimizer_prune_level;
+  uint use_cond_selectivity= thd->variables.optimizer_use_condition_selectivity;
+
+  TABLE *save_sort_by_table= sort_by_table;
+  JOIN_TAB *save_best_ref[MAX_TABLES];
+  for (uint i= 0; i < table_count; i++)
+    save_best_ref[i]= best_ref[i];
+
+  get_cardinality_estimate= TRUE;
+  if (greedy_search(this, joined_tables, search_depth, prune_level,
+                    use_cond_selectivity))
+    return TRUE;
+  cur_embedding_map= 0;
+  reset_nj_counters(this, join_list);
+  cur_sj_inner_tables= 0;
+  get_cardinality_estimate= FALSE;
+  sort_by_table= save_sort_by_table;
+  for (uint i= 0; i < table_count; i++)
+    best_ref[i]= save_best_ref[i];
   return FALSE;
 }
 

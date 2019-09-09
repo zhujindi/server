@@ -748,6 +748,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
       cardinality == DBL_MAX ||
       table->force_index ||
       !join->sort_nest_possible ||
+      join->get_cardinality_estimate ||
       table->keys_in_use_for_order_by.is_clear_all())
     return -1;
 
@@ -996,7 +997,7 @@ int get_index_on_table(JOIN_TAB *tab)
 
 void set_fraction_output_for_nest(JOIN *join, double *cardinality)
 {
-  if (join->sort_nest_possible)
+  if (join->sort_nest_possible && !join->get_cardinality_estimate)
   {
     double total_rows= join->join_record_count;
     set_if_bigger(total_rows, 1);
