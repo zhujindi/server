@@ -1,0 +1,1336 @@
+create database dbt3;
+use dbt3;
+# done to avoid filter for now
+set optimizer_switch='rowid_filter=off';
+set use_sort_nest=1;
+#
+# Using index scan on first table
+#
+set use_sort_nest=1;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal
+FROM
+orders, customer
+WHERE
+c_custkey= o_custkey
+ORDER BY o_orderDATE DESC 
+LIMIT 1;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	index	i_o_custkey	i_o_orderdate	4	NULL	1	Using where
+1	SIMPLE	customer	eq_ref	PRIMARY	PRIMARY	4	dbt3.orders.o_custkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal
+FROM
+orders, customer
+WHERE
+c_custkey= o_custkey
+ORDER BY o_orderDATE DESC 
+LIMIT 1;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal
+16	Customer#000000088	1998-08-02	131752.07	8031.44
+set use_sort_nest=0;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal
+FROM
+orders, customer
+WHERE
+c_custkey= o_custkey
+ORDER BY o_orderDATE DESC 
+LIMIT 1;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	index	i_o_custkey	i_o_orderdate	4	NULL	1	Using where
+1	SIMPLE	customer	eq_ref	PRIMARY	PRIMARY	4	dbt3.orders.o_custkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal
+FROM
+orders, customer
+WHERE
+c_custkey= o_custkey
+ORDER BY o_orderDATE DESC 
+LIMIT 1;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal
+16	Customer#000000088	1998-08-02	131752.07	8031.44
+########################################################################################################################################
+#
+# sort-nest on first table (customer)
+#
+set use_sort_nest=1;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	ALL	PRIMARY,i_c_nationkey	NULL	NULL	NULL	150	Using where; Using filesort
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+1	SIMPLE	orders	ref	i_o_orderdate,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+4	Customer#000000140	1997-11-07	107958.62	9963.15	EGYPT
+4	Customer#000000140	1997-09-28	179462.21	9963.15	EGYPT
+4	Customer#000000140	1997-09-15	28155.92	9963.15	EGYPT
+19	Customer#000000043	1998-07-12	36671.88	9904.28	ROMANIA
+19	Customer#000000043	1997-08-19	146221.66	9904.28	ROMANIA
+19	Customer#000000043	1998-01-13	139332.94	9904.28	ROMANIA
+19	Customer#000000043	1998-02-06	176647.54	9904.28	ROMANIA
+20	Customer#000000100	1998-05-25	104664.4	9889.89	SAUDI ARABIA
+20	Customer#000000100	1997-09-12	148299.05	9889.89	SAUDI ARABIA
+20	Customer#000000100	1998-04-27	113191.45	9889.89	SAUDI ARABIA
+set use_sort_nest=0;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	i_o_orderdate,i_o_custkey	i_o_orderdate	4	NULL	254	Using index condition; Using where; Using temporary; Using filesort
+1	SIMPLE	customer	eq_ref	PRIMARY,i_c_nationkey	PRIMARY	4	dbt3.orders.o_custkey	1	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+4	Customer#000000140	1997-09-15	28155.92	9963.15	EGYPT
+4	Customer#000000140	1997-11-07	107958.62	9963.15	EGYPT
+4	Customer#000000140	1997-09-28	179462.21	9963.15	EGYPT
+19	Customer#000000043	1998-07-12	36671.88	9904.28	ROMANIA
+19	Customer#000000043	1997-08-19	146221.66	9904.28	ROMANIA
+19	Customer#000000043	1998-01-13	139332.94	9904.28	ROMANIA
+19	Customer#000000043	1998-02-06	176647.54	9904.28	ROMANIA
+20	Customer#000000100	1997-09-12	148299.05	9889.89	SAUDI ARABIA
+20	Customer#000000100	1998-07-17	187156.38	9889.89	SAUDI ARABIA
+20	Customer#000000100	1998-04-27	113191.45	9889.89	SAUDI ARABIA
+########################################################################################################################################
+# Using range access for customer with index (c_acctbal), this does
+# the ordering
+#
+alter table customer add key (c_acctbal);
+set use_sort_nest=1;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+c_acctbal between 9000 AND 9200 AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY,i_c_nationkey,c_acctbal	c_acctbal	9	NULL	2	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+1	SIMPLE	orders	ref	i_o_orderdate,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+c_acctbal between 9000 AND 9200 AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+set use_sort_nest=0;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+c_acctbal between 9000 AND 9200 AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY,i_c_nationkey,c_acctbal	c_acctbal	9	NULL	2	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+1	SIMPLE	orders	ref	i_o_orderdate,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+c_acctbal between 9000 AND 9200 AND
+o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+ORDER BY c_acctbal DESC 
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+alter table customer drop key c_acctbal;
+########################################################################################################################################
+#
+# FILESORT ON FIRST TABLE (order)
+#
+set use_sort_nest=1;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, o_totalprice DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	i_o_orderdate,i_o_custkey	i_o_orderdate	4	NULL	24	Using index condition; Using where; Using filesort
+1	SIMPLE	customer	eq_ref	PRIMARY,i_c_nationkey	PRIMARY	4	dbt3.orders.o_custkey	1	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, o_totalprice DESC
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+3	Customer#000000013	1997-07-31	125188.72	3857.34	CANADA
+2	Customer#000000101	1997-07-31	79189.58	7470.96	BRAZIL
+9	Customer#000000130	1997-07-30	67979.49	5073.58	INDONESIA
+11	Customer#000000148	1997-07-29	88448.24	2135.6	IRAQ
+2	Customer#000000101	1997-07-28	204163.1	7470.96	BRAZIL
+11	Customer#000000052	1997-07-28	46393.97	5630.28	IRAQ
+11	Customer#000000148	1997-07-25	206179.68	2135.6	IRAQ
+4	Customer#000000004	1997-07-25	11405.4	2866.83	EGYPT
+18	Customer#000000082	1997-07-20	15082.82	9468.34	CHINA
+10	Customer#000000055	1997-07-16	46380.69	4572.11	IRAN
+set use_sort_nest=0;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, o_totalprice DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	i_o_orderdate,i_o_custkey	i_o_orderdate	4	NULL	24	Using index condition; Using where; Using filesort
+1	SIMPLE	customer	eq_ref	PRIMARY,i_c_nationkey	PRIMARY	4	dbt3.orders.o_custkey	1	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, o_totalprice DESC
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+3	Customer#000000013	1997-07-31	125188.72	3857.34	CANADA
+2	Customer#000000101	1997-07-31	79189.58	7470.96	BRAZIL
+9	Customer#000000130	1997-07-30	67979.49	5073.58	INDONESIA
+11	Customer#000000148	1997-07-29	88448.24	2135.6	IRAQ
+2	Customer#000000101	1997-07-28	204163.1	7470.96	BRAZIL
+11	Customer#000000052	1997-07-28	46393.97	5630.28	IRAQ
+11	Customer#000000148	1997-07-25	206179.68	2135.6	IRAQ
+4	Customer#000000004	1997-07-25	11405.4	2866.83	EGYPT
+18	Customer#000000082	1997-07-20	15082.82	9468.34	CHINA
+10	Customer#000000055	1997-07-16	46380.69	4572.11	IRAN
+########################################################################################################################################
+#
+#  FILESORT USING SORT-NEST on (orders, customer)
+#
+set use_sort_nest=1;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, c_acctbal DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	i_o_orderdate,i_o_custkey	i_o_orderdate	4	NULL	24	Using index condition; Using where
+1	SIMPLE	customer	eq_ref	PRIMARY,i_c_nationkey	PRIMARY	4	dbt3.orders.o_custkey	1	
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	10	Using filesort
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	sort-nest.c_nationkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, c_acctbal DESC
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+2	Customer#000000101	1997-07-31	79189.58	7470.96	BRAZIL
+3	Customer#000000013	1997-07-31	125188.72	3857.34	CANADA
+9	Customer#000000130	1997-07-30	67979.49	5073.58	INDONESIA
+11	Customer#000000148	1997-07-29	88448.24	2135.6	IRAQ
+2	Customer#000000101	1997-07-28	204163.1	7470.96	BRAZIL
+11	Customer#000000052	1997-07-28	46393.97	5630.28	IRAQ
+4	Customer#000000004	1997-07-25	11405.4	2866.83	EGYPT
+11	Customer#000000148	1997-07-25	206179.68	2135.6	IRAQ
+18	Customer#000000082	1997-07-20	15082.82	9468.34	CHINA
+10	Customer#000000055	1997-07-16	46380.69	4572.11	IRAN
+set use_sort_nest=0;
+explain SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, c_acctbal DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	i_o_orderdate,i_o_custkey	i_o_orderdate	4	NULL	24	Using index condition; Using where; Using temporary; Using filesort
+1	SIMPLE	customer	eq_ref	PRIMARY,i_c_nationkey	PRIMARY	4	dbt3.orders.o_custkey	1	Using where
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+SELECT
+c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+FROM
+orders, customer, nation 
+WHERE
+c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+ORDER BY o_orderDATE DESC, c_acctbal DESC
+LIMIT 10;
+c_nationkey	c_name	o_orderDate	o_totalprice	c_acctbal	n_name
+2	Customer#000000101	1997-07-31	79189.58	7470.96	BRAZIL
+3	Customer#000000013	1997-07-31	125188.72	3857.34	CANADA
+9	Customer#000000130	1997-07-30	67979.49	5073.58	INDONESIA
+11	Customer#000000148	1997-07-29	88448.24	2135.6	IRAQ
+2	Customer#000000101	1997-07-28	204163.1	7470.96	BRAZIL
+11	Customer#000000052	1997-07-28	46393.97	5630.28	IRAQ
+4	Customer#000000004	1997-07-25	11405.4	2866.83	EGYPT
+11	Customer#000000148	1997-07-25	206179.68	2135.6	IRAQ
+18	Customer#000000082	1997-07-20	15082.82	9468.34	CHINA
+10	Customer#000000055	1997-07-16	46380.69	4572.11	IRAN
+########################################################################################################################################
+#
+# Filesort on first table (orders)
+#
+set use_sort_nest=1;
+explain SELECT
+l_extendedprice , l_quantity, l_linenumber, l_orderkey, o_totalprice, o_orderkey
+FROM
+orders, lineitem
+WHERE
+o_orderkey= l_orderkey and l_shipDATE >= '1996-01-01' and l_shipDATE <= '1996-12-31'
+            ORDER BY o_totalprice DESC
+LIMIT 2;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	ALL	PRIMARY	NULL	NULL	NULL	1500	Using filesort
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_shipdate,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	dbt3.orders.o_orderkey	17	Using where
+SELECT
+l_extendedprice , l_quantity, l_linenumber, l_orderkey, o_totalprice, o_orderkey
+FROM
+orders, lineitem
+WHERE
+o_orderkey= l_orderkey and l_shipDATE >= '1996-01-01' and l_shipDATE <= '1996-12-31'
+            ORDER BY o_totalprice DESC
+LIMIT 2;
+l_extendedprice	l_quantity	l_linenumber	l_orderkey	o_totalprice	o_orderkey
+2922.21	3	2	3460	245976.74	3460
+49754.5	50	4	3460	245976.74	3460
+set use_sort_nest=0;
+explain SELECT
+l_extendedprice , l_quantity, l_linenumber, l_orderkey, o_totalprice, o_orderkey
+FROM
+orders, lineitem
+WHERE
+o_orderkey= l_orderkey and l_shipDATE >= '1996-01-01' and l_shipDATE <= '1996-12-31'
+            ORDER BY o_totalprice DESC
+LIMIT 2;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	lineitem	range	PRIMARY,i_l_shipdate,i_l_orderkey,i_l_orderkey_quantity	i_l_shipdate	4	NULL	812	Using index condition; Using temporary; Using filesort
+1	SIMPLE	orders	eq_ref	PRIMARY	PRIMARY	4	dbt3.lineitem.l_orderkey	1	
+SELECT
+l_extendedprice , l_quantity, l_linenumber, l_orderkey, o_totalprice, o_orderkey
+FROM
+orders, lineitem
+WHERE
+o_orderkey= l_orderkey and l_shipDATE >= '1996-01-01' and l_shipDATE <= '1996-12-31'
+            ORDER BY o_totalprice DESC
+LIMIT 2;
+l_extendedprice	l_quantity	l_linenumber	l_orderkey	o_totalprice	o_orderkey
+49754.5	50	4	3460	245976.74	3460
+44300.76	46	6	3460	245976.74	3460
+########################################################################################################################################
+#
+# Sort-nest on table (lineitem, customer)
+#
+set use_sort_nest=1;
+explain SELECT
+c_acctbal, c_name, o_orderDate, l_quantity, l_discount, l_orderkey
+FROM
+orders, customer, lineitem
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+l_shipDATE >= '1997-01-01' and l_shipDATE <=  '1998-08-10'
+            ORDER BY l_quantity DESC, c_acctbal DESC
+LIMIT 200;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	lineitem	range	PRIMARY,i_l_shipdate,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey_quantity	4	NULL	330	Using index condition; Using where
+1	SIMPLE	customer	ALL	PRIMARY	NULL	NULL	NULL	150	Using join buffer (flat, BNL join)
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	20	Using filesort
+1	SIMPLE	orders	ref	i_o_custkey	i_o_custkey	5	sort-nest.c_custkey	11	
+SELECT
+c_acctbal, c_name, o_orderDate, l_quantity, l_discount, l_orderkey
+FROM
+orders, customer, lineitem
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+l_shipDATE >= '1997-01-01' and l_shipDATE <=  '1998-08-10'
+            ORDER BY l_quantity DESC, c_acctbal DESC
+LIMIT 200;
+c_acctbal	c_name	o_orderDate	l_quantity	l_discount	l_orderkey
+9963.15	Customer#000000140	1993-02-21	50	0.02	5633
+9963.15	Customer#000000140	1997-11-07	50	0.02	5633
+9963.15	Customer#000000140	1997-09-28	50	0.02	5633
+9963.15	Customer#000000140	1995-09-30	50	0.02	5633
+9963.15	Customer#000000140	1997-09-15	50	0.02	5633
+9963.15	Customer#000000140	1994-10-24	50	0.02	5633
+9963.15	Customer#000000140	1995-07-29	50	0.02	5633
+9963.15	Customer#000000140	1996-11-20	50	0.02	5633
+9963.15	Customer#000000140	1992-03-04	50	0.02	5633
+9963.15	Customer#000000140	1992-03-17	50	0.02	5633
+9963.15	Customer#000000140	1995-03-02	50	0.02	5633
+9963.15	Customer#000000140	1993-02-21	50	0.06	5857
+9963.15	Customer#000000140	1997-11-07	50	0.06	5857
+9963.15	Customer#000000140	1997-09-28	50	0.06	5857
+9963.15	Customer#000000140	1995-09-30	50	0.06	5857
+9963.15	Customer#000000140	1997-09-15	50	0.06	5857
+9963.15	Customer#000000140	1994-10-24	50	0.06	5857
+9963.15	Customer#000000140	1995-07-29	50	0.06	5857
+9963.15	Customer#000000140	1996-11-20	50	0.06	5857
+9963.15	Customer#000000140	1992-03-04	50	0.06	5857
+9963.15	Customer#000000140	1992-03-17	50	0.06	5857
+9963.15	Customer#000000140	1995-03-02	50	0.06	5857
+9963.15	Customer#000000140	1993-02-21	50	0.07	5859
+9963.15	Customer#000000140	1997-11-07	50	0.07	5859
+9963.15	Customer#000000140	1997-09-28	50	0.07	5859
+9963.15	Customer#000000140	1995-09-30	50	0.07	5859
+9963.15	Customer#000000140	1997-09-15	50	0.07	5859
+9963.15	Customer#000000140	1994-10-24	50	0.07	5859
+9963.15	Customer#000000140	1995-07-29	50	0.07	5859
+9963.15	Customer#000000140	1996-11-20	50	0.07	5859
+9963.15	Customer#000000140	1992-03-04	50	0.07	5859
+9963.15	Customer#000000140	1992-03-17	50	0.07	5859
+9963.15	Customer#000000140	1995-03-02	50	0.07	5859
+9904.28	Customer#000000043	1993-12-29	50	0.02	5633
+9904.28	Customer#000000043	1997-02-13	50	0.02	5633
+9904.28	Customer#000000043	1994-05-23	50	0.02	5633
+9904.28	Customer#000000043	1997-01-13	50	0.02	5633
+9904.28	Customer#000000043	1996-04-29	50	0.02	5633
+9904.28	Customer#000000043	1993-01-26	50	0.02	5633
+9904.28	Customer#000000043	1996-08-17	50	0.02	5633
+9904.28	Customer#000000043	1998-07-12	50	0.02	5633
+9904.28	Customer#000000043	1997-07-12	50	0.02	5633
+9904.28	Customer#000000043	1993-02-03	50	0.02	5633
+9904.28	Customer#000000043	1997-08-19	50	0.02	5633
+9904.28	Customer#000000043	1993-03-09	50	0.02	5633
+9904.28	Customer#000000043	1993-02-28	50	0.02	5633
+9904.28	Customer#000000043	1995-07-29	50	0.02	5633
+9904.28	Customer#000000043	1996-06-29	50	0.02	5633
+9904.28	Customer#000000043	1993-11-10	50	0.02	5633
+9904.28	Customer#000000043	1992-10-25	50	0.02	5633
+9904.28	Customer#000000043	1998-01-13	50	0.02	5633
+9904.28	Customer#000000043	1998-02-06	50	0.02	5633
+9904.28	Customer#000000043	1997-02-07	50	0.02	5633
+9904.28	Customer#000000043	1993-12-29	50	0.06	5857
+9904.28	Customer#000000043	1997-02-13	50	0.06	5857
+9904.28	Customer#000000043	1994-05-23	50	0.06	5857
+9904.28	Customer#000000043	1997-01-13	50	0.06	5857
+9904.28	Customer#000000043	1996-04-29	50	0.06	5857
+9904.28	Customer#000000043	1993-01-26	50	0.06	5857
+9904.28	Customer#000000043	1996-08-17	50	0.06	5857
+9904.28	Customer#000000043	1998-07-12	50	0.06	5857
+9904.28	Customer#000000043	1997-07-12	50	0.06	5857
+9904.28	Customer#000000043	1993-02-03	50	0.06	5857
+9904.28	Customer#000000043	1997-08-19	50	0.06	5857
+9904.28	Customer#000000043	1993-03-09	50	0.06	5857
+9904.28	Customer#000000043	1993-02-28	50	0.06	5857
+9904.28	Customer#000000043	1995-07-29	50	0.06	5857
+9904.28	Customer#000000043	1996-06-29	50	0.06	5857
+9904.28	Customer#000000043	1993-11-10	50	0.06	5857
+9904.28	Customer#000000043	1992-10-25	50	0.06	5857
+9904.28	Customer#000000043	1998-01-13	50	0.06	5857
+9904.28	Customer#000000043	1998-02-06	50	0.06	5857
+9904.28	Customer#000000043	1997-02-07	50	0.06	5857
+9904.28	Customer#000000043	1993-12-29	50	0.07	5859
+9904.28	Customer#000000043	1997-02-13	50	0.07	5859
+9904.28	Customer#000000043	1994-05-23	50	0.07	5859
+9904.28	Customer#000000043	1997-01-13	50	0.07	5859
+9904.28	Customer#000000043	1996-04-29	50	0.07	5859
+9904.28	Customer#000000043	1993-01-26	50	0.07	5859
+9904.28	Customer#000000043	1996-08-17	50	0.07	5859
+9904.28	Customer#000000043	1998-07-12	50	0.07	5859
+9904.28	Customer#000000043	1997-07-12	50	0.07	5859
+9904.28	Customer#000000043	1993-02-03	50	0.07	5859
+9904.28	Customer#000000043	1997-08-19	50	0.07	5859
+9904.28	Customer#000000043	1993-03-09	50	0.07	5859
+9904.28	Customer#000000043	1993-02-28	50	0.07	5859
+9904.28	Customer#000000043	1995-07-29	50	0.07	5859
+9904.28	Customer#000000043	1996-06-29	50	0.07	5859
+9904.28	Customer#000000043	1993-11-10	50	0.07	5859
+9904.28	Customer#000000043	1992-10-25	50	0.07	5859
+9904.28	Customer#000000043	1998-01-13	50	0.07	5859
+9904.28	Customer#000000043	1998-02-06	50	0.07	5859
+9904.28	Customer#000000043	1997-02-07	50	0.07	5859
+9889.89	Customer#000000100	1998-05-25	50	0.02	5633
+9889.89	Customer#000000100	1996-06-22	50	0.02	5633
+9889.89	Customer#000000100	1995-05-19	50	0.02	5633
+9889.89	Customer#000000100	1994-04-30	50	0.02	5633
+9889.89	Customer#000000100	1992-09-06	50	0.02	5633
+9889.89	Customer#000000100	1995-09-04	50	0.02	5633
+9889.89	Customer#000000100	1996-10-02	50	0.02	5633
+9889.89	Customer#000000100	1992-05-10	50	0.02	5633
+9889.89	Customer#000000100	1997-09-12	50	0.02	5633
+9889.89	Customer#000000100	1993-01-31	50	0.02	5633
+9889.89	Customer#000000100	1998-04-27	50	0.02	5633
+9889.89	Customer#000000100	1992-09-17	50	0.02	5633
+9889.89	Customer#000000100	1998-07-17	50	0.02	5633
+9889.89	Customer#000000100	1994-12-08	50	0.02	5633
+9889.89	Customer#000000100	1994-01-31	50	0.02	5633
+9889.89	Customer#000000100	1993-03-25	50	0.02	5633
+9889.89	Customer#000000100	1993-06-28	50	0.02	5633
+9889.89	Customer#000000100	1998-05-25	50	0.06	5857
+9889.89	Customer#000000100	1996-06-22	50	0.06	5857
+9889.89	Customer#000000100	1995-05-19	50	0.06	5857
+9889.89	Customer#000000100	1994-04-30	50	0.06	5857
+9889.89	Customer#000000100	1992-09-06	50	0.06	5857
+9889.89	Customer#000000100	1995-09-04	50	0.06	5857
+9889.89	Customer#000000100	1996-10-02	50	0.06	5857
+9889.89	Customer#000000100	1992-05-10	50	0.06	5857
+9889.89	Customer#000000100	1997-09-12	50	0.06	5857
+9889.89	Customer#000000100	1993-01-31	50	0.06	5857
+9889.89	Customer#000000100	1998-04-27	50	0.06	5857
+9889.89	Customer#000000100	1992-09-17	50	0.06	5857
+9889.89	Customer#000000100	1998-07-17	50	0.06	5857
+9889.89	Customer#000000100	1994-12-08	50	0.06	5857
+9889.89	Customer#000000100	1994-01-31	50	0.06	5857
+9889.89	Customer#000000100	1993-03-25	50	0.06	5857
+9889.89	Customer#000000100	1993-06-28	50	0.06	5857
+9889.89	Customer#000000100	1998-05-25	50	0.07	5859
+9889.89	Customer#000000100	1996-06-22	50	0.07	5859
+9889.89	Customer#000000100	1995-05-19	50	0.07	5859
+9889.89	Customer#000000100	1994-04-30	50	0.07	5859
+9889.89	Customer#000000100	1992-09-06	50	0.07	5859
+9889.89	Customer#000000100	1995-09-04	50	0.07	5859
+9889.89	Customer#000000100	1996-10-02	50	0.07	5859
+9889.89	Customer#000000100	1992-05-10	50	0.07	5859
+9889.89	Customer#000000100	1997-09-12	50	0.07	5859
+9889.89	Customer#000000100	1993-01-31	50	0.07	5859
+9889.89	Customer#000000100	1998-04-27	50	0.07	5859
+9889.89	Customer#000000100	1992-09-17	50	0.07	5859
+9889.89	Customer#000000100	1998-07-17	50	0.07	5859
+9889.89	Customer#000000100	1994-12-08	50	0.07	5859
+9889.89	Customer#000000100	1994-01-31	50	0.07	5859
+9889.89	Customer#000000100	1993-03-25	50	0.07	5859
+9889.89	Customer#000000100	1993-06-28	50	0.07	5859
+9748.93	Customer#000000145	1995-04-17	50	0.02	5633
+9748.93	Customer#000000145	1998-02-08	50	0.02	5633
+9748.93	Customer#000000145	1996-11-01	50	0.02	5633
+9748.93	Customer#000000145	1993-11-24	50	0.02	5633
+9748.93	Customer#000000145	1997-12-24	50	0.02	5633
+9748.93	Customer#000000145	1995-08-22	50	0.02	5633
+9748.93	Customer#000000145	1998-01-28	50	0.02	5633
+9748.93	Customer#000000145	1996-06-27	50	0.02	5633
+9748.93	Customer#000000145	1995-09-13	50	0.02	5633
+9748.93	Customer#000000145	1997-11-23	50	0.02	5633
+9748.93	Customer#000000145	1994-04-03	50	0.02	5633
+9748.93	Customer#000000145	1997-09-07	50	0.02	5633
+9748.93	Customer#000000145	1997-01-12	50	0.02	5633
+9748.93	Customer#000000145	1992-04-09	50	0.02	5633
+9748.93	Customer#000000145	1997-12-14	50	0.02	5633
+9748.93	Customer#000000145	1994-09-30	50	0.02	5633
+9748.93	Customer#000000145	1994-06-02	50	0.02	5633
+9748.93	Customer#000000145	1995-04-17	50	0.06	5857
+9748.93	Customer#000000145	1998-02-08	50	0.06	5857
+9748.93	Customer#000000145	1996-11-01	50	0.06	5857
+9748.93	Customer#000000145	1993-11-24	50	0.06	5857
+9748.93	Customer#000000145	1997-12-24	50	0.06	5857
+9748.93	Customer#000000145	1995-08-22	50	0.06	5857
+9748.93	Customer#000000145	1998-01-28	50	0.06	5857
+9748.93	Customer#000000145	1996-06-27	50	0.06	5857
+9748.93	Customer#000000145	1995-09-13	50	0.06	5857
+9748.93	Customer#000000145	1997-11-23	50	0.06	5857
+9748.93	Customer#000000145	1994-04-03	50	0.06	5857
+9748.93	Customer#000000145	1997-09-07	50	0.06	5857
+9748.93	Customer#000000145	1997-01-12	50	0.06	5857
+9748.93	Customer#000000145	1992-04-09	50	0.06	5857
+9748.93	Customer#000000145	1997-12-14	50	0.06	5857
+9748.93	Customer#000000145	1994-09-30	50	0.06	5857
+9748.93	Customer#000000145	1994-06-02	50	0.06	5857
+9748.93	Customer#000000145	1995-04-17	50	0.07	5859
+9748.93	Customer#000000145	1998-02-08	50	0.07	5859
+9748.93	Customer#000000145	1996-11-01	50	0.07	5859
+9748.93	Customer#000000145	1993-11-24	50	0.07	5859
+9748.93	Customer#000000145	1997-12-24	50	0.07	5859
+9748.93	Customer#000000145	1995-08-22	50	0.07	5859
+9748.93	Customer#000000145	1998-01-28	50	0.07	5859
+9748.93	Customer#000000145	1996-06-27	50	0.07	5859
+9748.93	Customer#000000145	1995-09-13	50	0.07	5859
+9748.93	Customer#000000145	1997-11-23	50	0.07	5859
+9748.93	Customer#000000145	1994-04-03	50	0.07	5859
+9748.93	Customer#000000145	1997-09-07	50	0.07	5859
+9748.93	Customer#000000145	1997-01-12	50	0.07	5859
+9748.93	Customer#000000145	1992-04-09	50	0.07	5859
+9748.93	Customer#000000145	1997-12-14	50	0.07	5859
+9748.93	Customer#000000145	1994-09-30	50	0.07	5859
+9748.93	Customer#000000145	1994-06-02	50	0.07	5859
+9561.95	Customer#000000007	1992-05-01	50	0.02	5633
+9561.95	Customer#000000007	1992-04-26	50	0.02	5633
+9561.95	Customer#000000007	1994-06-11	50	0.02	5633
+9561.95	Customer#000000007	1994-05-30	50	0.02	5633
+9561.95	Customer#000000007	1994-09-02	50	0.02	5633
+set use_sort_nest=0;
+explain SELECT
+c_acctbal, c_name, o_orderDate, l_quantity, l_discount, l_orderkey
+FROM
+orders, customer, lineitem
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+l_shipDATE >= '1997-01-01' and l_shipDATE <=  '1998-08-10'
+            ORDER BY l_quantity DESC, c_acctbal DESC
+LIMIT 200;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	lineitem	range	PRIMARY,i_l_shipdate,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey_quantity	4	NULL	330	Using index condition; Using where; Using temporary; Using filesort
+1	SIMPLE	orders	ALL	i_o_custkey	NULL	NULL	NULL	1500	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	customer	eq_ref	PRIMARY	PRIMARY	4	dbt3.orders.o_custkey	1	
+SELECT
+c_acctbal, c_name, o_orderDate, l_quantity, l_discount, l_orderkey
+FROM
+orders, customer, lineitem
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+l_shipDATE >= '1997-01-01' and l_shipDATE <=  '1998-08-10'
+            ORDER BY l_quantity DESC, c_acctbal DESC
+LIMIT 200;
+c_acctbal	c_name	o_orderDate	l_quantity	l_discount	l_orderkey
+9963.15	Customer#000000140	1997-09-28	50	0.02	5633
+9963.15	Customer#000000140	1997-11-07	50	0.07	5859
+9963.15	Customer#000000140	1992-03-04	50	0.02	5633
+9963.15	Customer#000000140	1997-11-07	50	0.06	5857
+9963.15	Customer#000000140	1995-07-29	50	0.06	5857
+9963.15	Customer#000000140	1997-09-28	50	0.06	5857
+9963.15	Customer#000000140	1994-10-24	50	0.06	5857
+9963.15	Customer#000000140	1995-03-02	50	0.07	5859
+9963.15	Customer#000000140	1992-03-04	50	0.06	5857
+9963.15	Customer#000000140	1994-10-24	50	0.07	5859
+9963.15	Customer#000000140	1993-02-21	50	0.06	5857
+9963.15	Customer#000000140	1993-02-21	50	0.02	5633
+9963.15	Customer#000000140	1995-03-02	50	0.02	5633
+9963.15	Customer#000000140	1995-09-30	50	0.06	5857
+9963.15	Customer#000000140	1995-07-29	50	0.07	5859
+9963.15	Customer#000000140	1992-03-17	50	0.06	5857
+9963.15	Customer#000000140	1995-03-02	50	0.06	5857
+9963.15	Customer#000000140	1994-10-24	50	0.02	5633
+9963.15	Customer#000000140	1992-03-17	50	0.02	5633
+9963.15	Customer#000000140	1996-11-20	50	0.02	5633
+9963.15	Customer#000000140	1995-09-30	50	0.07	5859
+9963.15	Customer#000000140	1993-02-21	50	0.07	5859
+9963.15	Customer#000000140	1997-11-07	50	0.02	5633
+9963.15	Customer#000000140	1992-03-17	50	0.07	5859
+9963.15	Customer#000000140	1997-09-15	50	0.07	5859
+9963.15	Customer#000000140	1996-11-20	50	0.06	5857
+9963.15	Customer#000000140	1996-11-20	50	0.07	5859
+9963.15	Customer#000000140	1997-09-28	50	0.07	5859
+9963.15	Customer#000000140	1992-03-04	50	0.07	5859
+9963.15	Customer#000000140	1995-09-30	50	0.02	5633
+9963.15	Customer#000000140	1997-09-15	50	0.02	5633
+9963.15	Customer#000000140	1997-09-15	50	0.06	5857
+9963.15	Customer#000000140	1995-07-29	50	0.02	5633
+9904.28	Customer#000000043	1998-01-13	50	0.06	5857
+9904.28	Customer#000000043	1993-11-10	50	0.02	5633
+9904.28	Customer#000000043	1993-03-09	50	0.02	5633
+9904.28	Customer#000000043	1996-08-17	50	0.07	5859
+9904.28	Customer#000000043	1993-12-29	50	0.07	5859
+9904.28	Customer#000000043	1992-10-25	50	0.06	5857
+9904.28	Customer#000000043	1996-06-29	50	0.06	5857
+9904.28	Customer#000000043	1993-02-03	50	0.07	5859
+9904.28	Customer#000000043	1997-01-13	50	0.06	5857
+9904.28	Customer#000000043	1997-07-12	50	0.07	5859
+9904.28	Customer#000000043	1993-02-28	50	0.07	5859
+9904.28	Customer#000000043	1993-01-26	50	0.06	5857
+9904.28	Customer#000000043	1998-07-12	50	0.07	5859
+9904.28	Customer#000000043	1996-04-29	50	0.02	5633
+9904.28	Customer#000000043	1993-03-09	50	0.06	5857
+9904.28	Customer#000000043	1998-02-06	50	0.07	5859
+9904.28	Customer#000000043	1997-08-19	50	0.07	5859
+9904.28	Customer#000000043	1998-02-06	50	0.02	5633
+9904.28	Customer#000000043	1993-03-09	50	0.07	5859
+9904.28	Customer#000000043	1997-02-13	50	0.02	5633
+9904.28	Customer#000000043	1997-02-13	50	0.07	5859
+9904.28	Customer#000000043	1995-07-29	50	0.07	5859
+9904.28	Customer#000000043	1994-05-23	50	0.07	5859
+9904.28	Customer#000000043	1997-02-13	50	0.06	5857
+9904.28	Customer#000000043	1998-07-12	50	0.06	5857
+9904.28	Customer#000000043	1996-04-29	50	0.07	5859
+9904.28	Customer#000000043	1998-01-13	50	0.07	5859
+9904.28	Customer#000000043	1998-01-13	50	0.02	5633
+9904.28	Customer#000000043	1993-12-29	50	0.02	5633
+9904.28	Customer#000000043	1993-12-29	50	0.06	5857
+9904.28	Customer#000000043	1995-07-29	50	0.02	5633
+9904.28	Customer#000000043	1997-01-13	50	0.07	5859
+9904.28	Customer#000000043	1993-11-10	50	0.07	5859
+9904.28	Customer#000000043	1996-06-29	50	0.02	5633
+9904.28	Customer#000000043	1998-07-12	50	0.02	5633
+9904.28	Customer#000000043	1992-10-25	50	0.07	5859
+9904.28	Customer#000000043	1996-08-17	50	0.02	5633
+9904.28	Customer#000000043	1998-02-06	50	0.06	5857
+9904.28	Customer#000000043	1993-02-03	50	0.02	5633
+9904.28	Customer#000000043	1993-01-26	50	0.02	5633
+9904.28	Customer#000000043	1993-11-10	50	0.06	5857
+9904.28	Customer#000000043	1993-02-28	50	0.06	5857
+9904.28	Customer#000000043	1993-02-03	50	0.06	5857
+9904.28	Customer#000000043	1995-07-29	50	0.06	5857
+9904.28	Customer#000000043	1997-02-07	50	0.06	5857
+9904.28	Customer#000000043	1996-06-29	50	0.07	5859
+9904.28	Customer#000000043	1997-02-07	50	0.07	5859
+9904.28	Customer#000000043	1994-05-23	50	0.02	5633
+9904.28	Customer#000000043	1994-05-23	50	0.06	5857
+9904.28	Customer#000000043	1997-01-13	50	0.02	5633
+9904.28	Customer#000000043	1997-02-07	50	0.02	5633
+9904.28	Customer#000000043	1997-07-12	50	0.06	5857
+9904.28	Customer#000000043	1996-04-29	50	0.06	5857
+9904.28	Customer#000000043	1996-08-17	50	0.06	5857
+9904.28	Customer#000000043	1992-10-25	50	0.02	5633
+9904.28	Customer#000000043	1997-08-19	50	0.02	5633
+9904.28	Customer#000000043	1997-07-12	50	0.02	5633
+9904.28	Customer#000000043	1993-02-28	50	0.02	5633
+9904.28	Customer#000000043	1993-01-26	50	0.07	5859
+9904.28	Customer#000000043	1997-08-19	50	0.06	5857
+9889.89	Customer#000000100	1994-12-08	50	0.07	5859
+9889.89	Customer#000000100	1992-09-17	50	0.06	5857
+9889.89	Customer#000000100	1998-04-27	50	0.02	5633
+9889.89	Customer#000000100	1994-04-30	50	0.06	5857
+9889.89	Customer#000000100	1998-04-27	50	0.06	5857
+9889.89	Customer#000000100	1992-05-10	50	0.06	5857
+9889.89	Customer#000000100	1993-03-25	50	0.06	5857
+9889.89	Customer#000000100	1992-05-10	50	0.02	5633
+9889.89	Customer#000000100	1998-07-17	50	0.06	5857
+9889.89	Customer#000000100	1992-09-17	50	0.07	5859
+9889.89	Customer#000000100	1994-04-30	50	0.07	5859
+9889.89	Customer#000000100	1997-09-12	50	0.06	5857
+9889.89	Customer#000000100	1998-07-17	50	0.02	5633
+9889.89	Customer#000000100	1995-09-04	50	0.02	5633
+9889.89	Customer#000000100	1993-01-31	50	0.07	5859
+9889.89	Customer#000000100	1998-05-25	50	0.02	5633
+9889.89	Customer#000000100	1995-09-04	50	0.06	5857
+9889.89	Customer#000000100	1992-09-17	50	0.02	5633
+9889.89	Customer#000000100	1995-05-19	50	0.07	5859
+9889.89	Customer#000000100	1996-10-02	50	0.07	5859
+9889.89	Customer#000000100	1994-04-30	50	0.02	5633
+9889.89	Customer#000000100	1998-07-17	50	0.07	5859
+9889.89	Customer#000000100	1993-03-25	50	0.02	5633
+9889.89	Customer#000000100	1998-05-25	50	0.06	5857
+9889.89	Customer#000000100	1996-06-22	50	0.07	5859
+9889.89	Customer#000000100	1998-05-25	50	0.07	5859
+9889.89	Customer#000000100	1993-03-25	50	0.07	5859
+9889.89	Customer#000000100	1995-05-19	50	0.02	5633
+9889.89	Customer#000000100	1993-01-31	50	0.06	5857
+9889.89	Customer#000000100	1992-09-06	50	0.02	5633
+9889.89	Customer#000000100	1994-01-31	50	0.06	5857
+9889.89	Customer#000000100	1992-05-10	50	0.07	5859
+9889.89	Customer#000000100	1995-05-19	50	0.06	5857
+9889.89	Customer#000000100	1993-01-31	50	0.02	5633
+9889.89	Customer#000000100	1994-01-31	50	0.02	5633
+9889.89	Customer#000000100	1997-09-12	50	0.07	5859
+9889.89	Customer#000000100	1996-10-02	50	0.02	5633
+9889.89	Customer#000000100	1996-10-02	50	0.06	5857
+9889.89	Customer#000000100	1996-06-22	50	0.02	5633
+9889.89	Customer#000000100	1993-06-28	50	0.07	5859
+9889.89	Customer#000000100	1993-06-28	50	0.06	5857
+9889.89	Customer#000000100	1992-09-06	50	0.06	5857
+9889.89	Customer#000000100	1997-09-12	50	0.02	5633
+9889.89	Customer#000000100	1998-04-27	50	0.07	5859
+9889.89	Customer#000000100	1994-12-08	50	0.02	5633
+9889.89	Customer#000000100	1995-09-04	50	0.07	5859
+9889.89	Customer#000000100	1994-01-31	50	0.07	5859
+9889.89	Customer#000000100	1994-12-08	50	0.06	5857
+9889.89	Customer#000000100	1992-09-06	50	0.07	5859
+9889.89	Customer#000000100	1993-06-28	50	0.02	5633
+9889.89	Customer#000000100	1996-06-22	50	0.06	5857
+9748.93	Customer#000000145	1997-12-24	50	0.02	5633
+9748.93	Customer#000000145	1996-11-01	50	0.06	5857
+9748.93	Customer#000000145	1997-11-23	50	0.02	5633
+9748.93	Customer#000000145	1998-02-08	50	0.07	5859
+9748.93	Customer#000000145	1995-04-17	50	0.02	5633
+9748.93	Customer#000000145	1993-11-24	50	0.07	5859
+9748.93	Customer#000000145	1997-11-23	50	0.06	5857
+9748.93	Customer#000000145	1994-09-30	50	0.02	5633
+9748.93	Customer#000000145	1997-01-12	50	0.07	5859
+9748.93	Customer#000000145	1997-12-14	50	0.06	5857
+9748.93	Customer#000000145	1995-09-13	50	0.06	5857
+9748.93	Customer#000000145	1998-01-28	50	0.06	5857
+9748.93	Customer#000000145	1998-01-28	50	0.07	5859
+9748.93	Customer#000000145	1992-04-09	50	0.06	5857
+9748.93	Customer#000000145	1998-01-28	50	0.02	5633
+9748.93	Customer#000000145	1994-04-03	50	0.07	5859
+9748.93	Customer#000000145	1995-09-13	50	0.02	5633
+9748.93	Customer#000000145	1992-04-09	50	0.02	5633
+9748.93	Customer#000000145	1994-04-03	50	0.02	5633
+9748.93	Customer#000000145	1994-06-02	50	0.06	5857
+9748.93	Customer#000000145	1997-12-24	50	0.07	5859
+9748.93	Customer#000000145	1993-11-24	50	0.02	5633
+9748.93	Customer#000000145	1995-08-22	50	0.06	5857
+9748.93	Customer#000000145	1994-06-02	50	0.02	5633
+9748.93	Customer#000000145	1994-09-30	50	0.07	5859
+9748.93	Customer#000000145	1997-01-12	50	0.02	5633
+9748.93	Customer#000000145	1995-08-22	50	0.02	5633
+9748.93	Customer#000000145	1997-12-14	50	0.07	5859
+9748.93	Customer#000000145	1995-09-13	50	0.07	5859
+9748.93	Customer#000000145	1997-09-07	50	0.07	5859
+9748.93	Customer#000000145	1995-04-17	50	0.07	5859
+9748.93	Customer#000000145	1996-06-27	50	0.06	5857
+9748.93	Customer#000000145	1998-02-08	50	0.06	5857
+9748.93	Customer#000000145	1998-02-08	50	0.02	5633
+9748.93	Customer#000000145	1996-06-27	50	0.02	5633
+9748.93	Customer#000000145	1992-04-09	50	0.07	5859
+9748.93	Customer#000000145	1997-01-12	50	0.06	5857
+9748.93	Customer#000000145	1997-12-24	50	0.06	5857
+9748.93	Customer#000000145	1994-06-02	50	0.07	5859
+9748.93	Customer#000000145	1995-04-17	50	0.06	5857
+9748.93	Customer#000000145	1994-09-30	50	0.06	5857
+9748.93	Customer#000000145	1997-12-14	50	0.02	5633
+9748.93	Customer#000000145	1994-04-03	50	0.06	5857
+9748.93	Customer#000000145	1997-11-23	50	0.07	5859
+9748.93	Customer#000000145	1996-11-01	50	0.02	5633
+9748.93	Customer#000000145	1996-11-01	50	0.07	5859
+9748.93	Customer#000000145	1997-09-07	50	0.06	5857
+9748.93	Customer#000000145	1997-09-07	50	0.02	5633
+9748.93	Customer#000000145	1995-08-22	50	0.07	5859
+9748.93	Customer#000000145	1996-06-27	50	0.07	5859
+9748.93	Customer#000000145	1993-11-24	50	0.06	5857
+9561.95	Customer#000000007	1992-06-03	50	0.06	5857
+9561.95	Customer#000000007	1995-05-23	50	0.07	5859
+9561.95	Customer#000000007	1995-05-23	50	0.06	5857
+9561.95	Customer#000000007	1995-05-23	50	0.02	5633
+9561.95	Customer#000000007	1992-06-03	50	0.07	5859
+########################################################################################################################################
+#
+# Sort-nest on table (customer, order)
+#
+set use_sort_nest=1;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+c_nationkey = n_nationkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY,i_c_nationkey	PRIMARY	4	NULL	7	Using index condition
+1	SIMPLE	orders	ref	PRIMARY,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	1	Using filesort
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	sort-nest.c_nationkey	1	
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	sort-nest.o_orderkey	17	
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+c_nationkey = n_nationkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	5	0.07	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CHINA
+6819.74	182966.39	Customer#000000008	1994-07-17	24	0.08	5572	PERU
+6819.74	182966.39	Customer#000000008	1994-07-17	27	0.03	5572	PERU
+set use_sort_nest=0;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+c_nationkey = n_nationkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY,i_c_nationkey	PRIMARY	4	NULL	7	Using index condition; Using where; Using temporary; Using filesort
+1	SIMPLE	nation	eq_ref	PRIMARY	PRIMARY	4	dbt3.customer.c_nationkey	1	
+1	SIMPLE	orders	ref	PRIMARY,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	dbt3.orders.o_orderkey	17	
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+c_nationkey = n_nationkey
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	5	0.07	5953	CHINA
+6819.74	182966.39	Customer#000000008	1994-07-17	27	0.03	5572	PERU
+6819.74	182966.39	Customer#000000008	1994-07-17	34	0.1	5572	PERU
+########################################################################################################################################
+#
+# Sort-nest on table (orders, customer)
+#
+set use_sort_nest=1;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+l_orderkey = o_orderkey
+AND
+n_nationkey between 1 and 25
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 100
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	orders	range	PRIMARY	PRIMARY	4	NULL	151	Using index condition
+1	SIMPLE	customer	ALL	PRIMARY	NULL	NULL	NULL	150	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	1	Using filesort
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	sort-nest.o_orderkey	17	
+1	SIMPLE	nation	ALL	PRIMARY	NULL	NULL	NULL	25	Using where
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+l_orderkey = o_orderkey
+AND
+n_nationkey between 1 and 25
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 100
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	ARGENTINA
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	BRAZIL
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	CANADA
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	EGYPT
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	ETHIOPIA
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	FRANCE
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	GERMANY
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	INDIA
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	INDONESIA
+9983.38	249900.42	Customer#000000045	1994-12-15	31	0	5765	IRAN
+set use_sort_nest=0;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+l_orderkey = o_orderkey
+AND
+n_nationkey between 1 and 25
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 100
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	nation	range	PRIMARY	PRIMARY	4	NULL	24	Using index condition; Using temporary; Using filesort
+1	SIMPLE	customer	ALL	PRIMARY	NULL	NULL	NULL	150	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	lineitem	range	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey_quantity	4	NULL	330	Using index condition; Using where; Using join buffer (incremental, BNL join)
+1	SIMPLE	orders	eq_ref	PRIMARY	PRIMARY	4	dbt3.lineitem.l_orderkey	1	
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+l_orderkey = o_orderkey
+AND
+n_nationkey between 1 and 25
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 100
+ORDER BY
+c_acctbal DESC, o_totalprice  DESC
+LIMIT 10;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	INDONESIA
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	EGYPT
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	ARGENTINA
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	FRANCE
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	INDIA
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	IRAN
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	GERMANY
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	CANADA
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	ETHIOPIA
+9983.38	249900.42	Customer#000000045	1994-12-15	21	0.05	5765	BRAZIL
+########################################################################################################################################
+#
+# Sort-nest on table (customer, orders, lineitem)
+#
+set use_sort_nest=1;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+n_regionkey between 1 and 3
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice DESC, l_quantity DESC
+LIMIT 100;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY	PRIMARY	4	NULL	7	Using index condition
+1	SIMPLE	orders	ref	PRIMARY,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	dbt3.orders.o_orderkey	17	
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	6	Using filesort
+1	SIMPLE	nation	ALL	i_n_regionkey	NULL	NULL	NULL	25	Using where
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+n_regionkey between 1 and 3
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice DESC, l_quantity DESC
+LIMIT 100;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	BRAZIL
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	FRANCE
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	INDIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	ROMANIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	VIETNAM
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	RUSSIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	UNITED KINGDOM
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	BRAZIL
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	FRANCE
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	INDIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	ROMANIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	VIETNAM
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	RUSSIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	UNITED KINGDOM
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	BRAZIL
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	FRANCE
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	INDIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CHINA
+set use_sort_nest=0;
+explain SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+n_regionkey between 1 and 3
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice DESC, l_quantity DESC
+LIMIT 100;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	customer	range	PRIMARY	PRIMARY	4	NULL	7	Using index condition; Using temporary; Using filesort
+1	SIMPLE	orders	ref	PRIMARY,i_o_custkey	i_o_custkey	5	dbt3.customer.c_custkey	11	Using where
+1	SIMPLE	nation	ALL	i_n_regionkey	NULL	NULL	NULL	25	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	lineitem	ref	PRIMARY,i_l_orderkey,i_l_orderkey_quantity	i_l_orderkey	4	dbt3.orders.o_orderkey	17	
+SELECT
+c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+FROM
+orders, customer, lineitem, nation
+WHERE
+c_custkey= o_custkey
+AND
+l_orderkey = o_orderkey
+AND
+n_regionkey between 1 and 3
+AND
+l_orderkey between 5500 AND 6000
+AND
+c_custkey between 1 and 10
+ORDER BY
+c_acctbal DESC, o_totalprice DESC, l_quantity DESC
+LIMIT 100;
+c_acctbal	o_totalprice	c_name	o_orderDate	l_quantity	l_discount	l_orderkey	n_name
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	43	0.06	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	27	0.1	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	INDONESIA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	24	0.09	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	JAPAN
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CHINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	VIETNAM
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	UNITED KINGDOM
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	BRAZIL
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	FRANCE
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	INDIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	PERU
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	ROMANIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	RUSSIA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	UNITED STATES
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	ARGENTINA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	CANADA
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	GERMANY
+9561.95	101429.61	Customer#000000007	1993-04-21	11	0.06	5670	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	ROMANIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	RUSSIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	VIETNAM
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	UNITED KINGDOM
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	BRAZIL
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	FRANCE
+9561.95	95312.81	Customer#000000007	1992-03-28	36	0.03	5953	INDIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CHINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	VIETNAM
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	UNITED KINGDOM
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	BRAZIL
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	FRANCE
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	INDIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	ROMANIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	RUSSIA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	34	0.03	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	PERU
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	ROMANIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	RUSSIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	UNITED STATES
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	ARGENTINA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CANADA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	GERMANY
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	INDONESIA
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	JAPAN
+9561.95	95312.81	Customer#000000007	1992-03-28	23	0.09	5953	CHINA
+drop database dbt3;

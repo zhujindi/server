@@ -1,0 +1,282 @@
+create database dbt3;
+use dbt3;
+--disable_query_log
+--source include/dbt3_s001.inc
+--enable_query_log
+
+--echo # done to avoid filter for now
+set optimizer_switch='rowid_filter=off';
+set use_sort_nest=1;
+
+--echo #
+--echo # Using index scan on first table
+--echo #
+
+let $query= SELECT
+             c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal
+            FROM
+              orders, customer
+            WHERE
+              c_custkey= o_custkey
+            ORDER BY o_orderDATE DESC 
+            LIMIT 1;
+
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # sort-nest on first table (customer)
+--echo #
+
+let $query= SELECT
+              c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+            FROM
+              orders, customer, nation 
+            WHERE
+              c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+              o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+            ORDER BY c_acctbal DESC 
+            LIMIT 10;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+
+--echo ########################################################################################################################################
+
+--echo # Using range access for customer with index (c_acctbal), this does
+--echo # the ordering
+--echo #
+
+alter table customer add key (c_acctbal);
+
+let $query= SELECT
+              c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+            FROM
+              orders, customer, nation 
+            WHERE
+              c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+              c_acctbal between 9000 AND 9200 AND
+              o_orderDATE >='1997-07-30' and o_orderDATE <= '1998-07-30' 
+            ORDER BY c_acctbal DESC 
+            LIMIT 10;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+alter table customer drop key c_acctbal;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # FILESORT ON FIRST TABLE (order)
+--echo #
+
+let $query= SELECT
+              c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+            FROM
+              orders, customer, nation 
+            WHERE
+              c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+              o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+            ORDER BY o_orderDATE DESC, o_totalprice DESC
+            LIMIT 10;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo #  FILESORT USING SORT-NEST on (orders, customer)
+--echo #
+
+let $query= SELECT
+              c_nationkey, c_name, o_orderDate, o_totalprice, c_acctbal, n_name
+            FROM
+              orders, customer, nation 
+            WHERE
+              c_custkey= o_custkey AND c_nationkey=n_nationkey AND
+              o_orderDATE >='1997-07-01' and o_orderDATE <= '1997-07-31' 
+            ORDER BY o_orderDATE DESC, c_acctbal DESC
+            LIMIT 10;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # Filesort on first table (orders)
+--echo #
+
+let $query= SELECT
+              l_extendedprice , l_quantity, l_linenumber, l_orderkey, o_totalprice, o_orderkey
+            FROM
+              orders, lineitem
+            WHERE
+             o_orderkey= l_orderkey and l_shipDATE >= '1996-01-01' and l_shipDATE <= '1996-12-31'
+            ORDER BY o_totalprice DESC
+            LIMIT 2;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # Sort-nest on table (lineitem, customer)
+--echo #
+
+let $query= SELECT
+              c_acctbal, c_name, o_orderDate, l_quantity, l_discount, l_orderkey
+            FROM
+              orders, customer, lineitem
+            WHERE
+              c_custkey= o_custkey
+             AND
+              l_orderkey between 5500 AND 6000
+             AND
+              l_shipDATE >= '1997-01-01' and l_shipDATE <=  '1998-08-10'
+            ORDER BY l_quantity DESC, c_acctbal DESC
+            LIMIT 200;
+
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # Sort-nest on table (customer, order)
+--echo #
+
+
+let $query= SELECT
+              c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+            FROM
+              orders, customer, lineitem, nation
+            WHERE
+              c_custkey= o_custkey
+             AND
+              l_orderkey = o_orderkey
+             AND
+              c_nationkey = n_nationkey
+             AND
+              l_orderkey between 5500 AND 6000
+             AND
+              c_custkey between 1 and 10
+            ORDER BY
+             c_acctbal DESC, o_totalprice  DESC
+            LIMIT 10;
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # Sort-nest on table (orders, customer)
+--echo #
+
+let $query= SELECT
+              c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+            FROM
+              orders, customer, lineitem, nation
+            WHERE
+              l_orderkey = o_orderkey
+             AND
+              n_nationkey between 1 and 25
+             AND
+              l_orderkey between 5500 AND 6000
+             AND
+              c_custkey between 1 and 100
+            ORDER BY
+             c_acctbal DESC, o_totalprice  DESC
+            LIMIT 10;
+
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+--echo ########################################################################################################################################
+
+--echo #
+--echo # Sort-nest on table (customer, orders, lineitem)
+--echo #
+
+let $query= SELECT
+              c_acctbal, o_totalprice, c_name, o_orderDate, l_quantity, l_discount, l_orderkey, n_name
+            FROM
+              orders, customer, lineitem, nation
+            WHERE
+              c_custkey= o_custkey
+             AND
+              l_orderkey = o_orderkey
+             AND
+              n_regionkey between 1 and 3
+             AND
+              l_orderkey between 5500 AND 6000
+             AND
+              c_custkey between 1 and 10
+            ORDER BY
+             c_acctbal DESC, o_totalprice DESC, l_quantity DESC
+            LIMIT 100;
+
+
+set use_sort_nest=1;
+eval explain $query;
+eval $query;
+set use_sort_nest=0;
+eval explain $query;
+eval $query;
+
+drop database dbt3;
+
