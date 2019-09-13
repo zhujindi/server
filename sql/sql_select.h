@@ -846,12 +846,6 @@ public:
     is_used= FALSE;
   }
 
-  /* Please review this fix */
-  void set_loosescan_key(uint key)
-  {
-    loosescan_key= key;
-  }
-
   void set_from_prev(struct st_position *prev);
   bool check_qep(JOIN *join,
                  uint idx,
@@ -872,7 +866,11 @@ public:
                                bool      disable_jbuf,
                                double    record_count,
                                struct st_position *pos,
-                               struct st_position *loose_scan_pos);
+                               struct st_position *loose_scan_pos,
+                               int *index_used,
+                               double cardinality,
+                               table_map sort_nest_tables,
+                               bool nest_created);
   friend bool get_best_combination(JOIN *join);
   friend int setup_semijoin_loosescan(JOIN *join);
   friend void fix_semijoin_strategies_for_picked_join_order(JOIN *join);

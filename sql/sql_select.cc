@@ -8101,7 +8101,7 @@ best_access_path(JOIN      *join,
   pos->key=          best_key;
   pos->table=        s;
   pos->ref_depend_map= best_ref_depends_map;
-  pos->loosescan_picker.set_loosescan_key(MAX_KEY);
+  pos->loosescan_picker.loosescan_key= MAX_KEY;
   pos->use_join_buffer= best_uses_jbuf;
   pos->spl_plan= spl_plan;
   pos->range_rowid_filter_info= best_filter;
