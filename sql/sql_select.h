@@ -366,6 +366,11 @@ typedef struct st_join_table {
   uint		used_fields;
   ulong         used_fieldlength;
   ulong         max_used_fieldlength;
+  /*
+    Estimate for the length of a record that would be stored in the nest.
+    The estimate contains length of all the fields that have bitmap read_set
+    set for them.
+  */
   ulong         used_rec_length_for_nest;
   uint          used_blobs;
   uint          used_null_fields;
@@ -526,8 +531,8 @@ typedef struct st_join_table {
   bool is_rowid_filter_built;
 
   /*
-    Set to true if we consider creating a nest for a prefix of the
-    join order that satisfies the ordering.
+    Set to TRUE if we picked a join order that would use a sort-nest on
+    a prefix that satisfies the ORDER BY clause.
   */
   bool is_sort_nest;
 
@@ -1004,12 +1009,16 @@ typedef struct st_position
   Range_rowid_filter_cost_info *range_rowid_filter_info;
 
   /*
-    Flag to be set to TRUE if the join prefix satisfies the ORDER BY CLAUSE
+    Flag to be set to TRUE if prefix of a join satisfies the ORDER BY CLAUSE
+    This flag is only set at the join planner stage.
   */
   bool sort_nest_operation_here;
   /*
-    set to the index number which we pick for index scan
+    set to the index number for the first non-const table only if it
+    satisfies the ORDER BY CLAUSE and has the lowest cost of accessing
+    the table.
     -1 otherwise
+    This is set only at the join planner stage.
   */
   int index_no;
 
@@ -1528,23 +1537,31 @@ public:
     the optimize_cond() call in JOIN::optimize_inner() method.
   */
   bool is_orig_degenerated;
+
+  /* TODO varun: see if this needs a better comment than this
+
+    NOT NULL  sort-nest present
+    NULL      sort-nest not present
+  */
   SORT_NEST_INFO *sort_nest_info;
 
   /*
-    Set to TRUE if the query can use order by limit optimization with
-    sort-nest.It caches the value that tells if the join optimizer
+    Set to TRUE if the query can use ORDER BY LIMIT optimization with
+    sort-nest. It caches the value that tells if the join optimizer
     should consider using a sort-nest or not.
+    @see sort_nest_allowed()
   */
   bool sort_nest_possible;
 
   /*
-    SET to TRUE when we want to get the estimate of cardianlity for a join
+    SET to TRUE when one wants to get an estimate of the cardinality for a
+    join.
   */
   bool get_cardinality_estimate;
 
   /*
-    This is need for the sort-nest to adjust the number of records that would
-    actual be read for the nest.
+    The fraction of records we would read of the sort-nest or the first table
+    that satisfies the ORDER BY clause, after the sorting is done.
   */
   double fraction_output_for_nest;
 
@@ -1653,14 +1670,6 @@ public:
   /* Number of tables actually joined at the top level */
   uint exec_join_tab_cnt() { return tables_list ? top_join_tab_count : 0; }
 
-  /* TRUE if the sort-nest contains more than one table else FALSE */
-  bool sort_nest_needed()
-  {
-    return sort_nest_info ?
-           (sort_nest_info->n_tables == 1 ? FALSE :TRUE):
-           FALSE;
-  }
-
   /*
     Number of tables in the join which also includes the temporary tables
     created for GROUP BY, DISTINCT , WINDOW FUNCTION etc.
@@ -1668,6 +1677,16 @@ public:
   uint total_join_tab_cnt()
   {
     return exec_join_tab_cnt() + aggr_tables - 1;
+  }
+
+  /*
+    TRUE   if the sort-nest contains more than one table
+    FALSE  otherwise
+  */
+  bool sort_nest_needed()
+  {
+    DBUG_ASSERT(sort_nest_info);
+    return sort_nest_info->n_tables == 1 ? FALSE : TRUE;
   }
 
   int prepare(TABLE_LIST *tables, uint wind_num,
@@ -1807,43 +1826,12 @@ public:
             (rollup.state != ROLLUP::STATE_NONE && select_distinct));
   }
 
-
-  /*
-    Sort nest is needed currently when we can shortcut the entire join.
-    So for the operation that require the entire join computation to be done
-    first and then applies the operation on the full join output don't need
-    the sort nest, so we disable the usage of sort nest for such operations.
-
-    Sort nest is not allowed for
-    1) ORDER clause is not present
-    2) Only constant tables in the join
-    3) DISTINCT clause
-    4) GROUP BY CLAUSE
-    5) HAVING clause (that was not pushed to where)
-    6) Aggregate Functions
-    7) Window Functions
-    8) Using Rollup
-    9) Using SQL_BUFFER_RESULT
-    10) Only Select queries can use the sort nest
-    11) LIMIT is present
-
-    Returns TRUE if sort-nest is allowed
-  */
-
-  bool sort_nest_allowed()
-  {
-    return thd->variables.use_sort_nest &&
-            !(const_tables == table_count || !order ||
-             (select_distinct || group_list) || having  ||
-             MY_TEST(select_options & OPTION_BUFFER_RESULT) ||
-             (rollup.state != ROLLUP::STATE_NONE && select_distinct) ||
-             select_lex->window_specs.elements > 0 ||
-             select_lex->agg_func_used() ||
-             select_limit == HA_POS_ERROR ||
-             thd->lex->sql_command != SQLCOM_SELECT);
-  }
+  bool sort_nest_allowed();
   bool is_order_by_expensive();
   bool estimate_cardinality(table_map joined_tables);
+  uint check_if_sort_nest_present(uint *n_tables);
+  bool create_sort_nest_info(uint n_tables);
+  bool remove_const_from_order_by();
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -1874,7 +1862,6 @@ public:
   bool fix_all_splittings_in_plan();
 
   bool transform_in_predicates_into_in_subq(THD *thd);
-  bool remove_const_from_order_by();
 private:
   /**
     Create a temporary table to be used for processing DISTINCT/ORDER
@@ -2194,7 +2181,6 @@ double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order);
 bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
                                          table_map previous_tables);
-bool create_sort_nest_if_needed(JOIN *join);
 bool setup_sort_nest(JOIN *join);
 void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab);
 double sort_nest_oper_cost(JOIN *join, double join_record_count,

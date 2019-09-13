@@ -29191,20 +29191,26 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
 
 /*
   @brief
-   Estimate the cardinality of a join
+   Estimate the cardinality for a join
 
   @param
     joined_tables            map of all the non-const tables of the join
 
   @details
-    Run the join optimizer to get the estimate of cardinality for a join.
+    Run the join planner to get an estimate of cardinality for a join.
 
   @note
     This is currently used by the ORDER BY LIMIT optimization with the
-    sort-nest.
+    sort-nest. This is a very expensive way to compute cardinality.
 
-  @param
-    joined_tables            map of all the tables to be joined
+    The cardinality of the join remains the same irrespective of the way the
+    tables are joined theoretically but that is not the case with our join
+    planner.
+
+    Still we would like to speed this process of getting the estimates of
+    cardinality for a join by reducing the number of permutations of
+    join orders to be considered. We can do this by running the join planner
+    with a small value for system variable optimizer_search_depth.
 
   @retval
     TRUE         error

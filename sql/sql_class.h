@@ -6078,6 +6078,11 @@ public:
   bool materialized; /* TRUE <=> materialization already performed */
   table_map nest_tables_map;
   Item *nest_cond;
+  /*
+    set to the index number for the index that does the index scan on the
+    first non-const table and satisfies the ORDER BY clause.
+    -1 otherwise
+  */
   int index_used;
 };
 
