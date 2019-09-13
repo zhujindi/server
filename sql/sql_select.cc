@@ -10547,7 +10547,7 @@ bool JOIN::get_best_combination()
       j->ref.key = -1;
       j->on_expr_ref= (Item**) &null_ptr;
       j->is_sort_nest= TRUE;
-      j->records_read= calculate_record_count_for_sort_nest(this, tables);
+      j->records_read= calculate_record_count_for_sort_nest(tables);
       j->records= (ha_rows) j->records_read;
       j->cond_selectivity= 1.0;
       sort_nest_info->nest_tab= j;

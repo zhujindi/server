@@ -688,17 +688,37 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
 }
 
 
-double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables)
+/*
+  @brief
+    Calculate the number of records that would be read from the sort-nest.
+
+  @param n_tables          number of tables in the sort-nest
+
+  @details
+    The number of records read from the sort-nest would be:
+
+      cardinality(join of inner table of nest) * selectivity_of_limit;
+
+    Here selectivity of limit is how many records we would expect in the output.
+    selectivity_of_limit= limit / cardinality(join of all tables)
+
+    This number of records is what we would also see in the EXPLAIN output
+    for the sort-nest in the columns "rows".
+
+  @retval Number of records that the optimizer expects to be read
+          from the sort-nest
+*/
+
+double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
 {
-  double sort_nest_records=1, record_count;
-  JOIN_TAB *tab= join->join_tab + join->const_tables;
-  for (uint j= 0; j < n_tables ;j++, tab++)
+  double sort_nest_records= 1, record_count;
+  JOIN_TAB *tab= join_tab + const_tables;
+  for (uint j= 0; j < n_tables ; j++, tab++)
   {
     record_count= tab->records_read * tab->cond_selectivity;
     sort_nest_records= COST_MULT(sort_nest_records, record_count);
   }
-  sort_nest_records= COST_MULT(sort_nest_records,
-                               join->fraction_output_for_nest);
+  sort_nest_records= sort_nest_records * fraction_output_for_nest;
   set_if_bigger(sort_nest_records, 1);
   return sort_nest_records;
 }

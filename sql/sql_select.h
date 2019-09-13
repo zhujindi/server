@@ -1834,6 +1834,7 @@ public:
   bool create_sort_nest_info(uint n_tables);
   bool remove_const_from_order_by();
   bool make_sort_nest();
+  double calculate_record_count_for_sort_nest(uint n_tables);
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
