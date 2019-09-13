@@ -2505,7 +2505,7 @@ int JOIN::optimize_stage2()
   {
     if (make_sort_nest())
       DBUG_RETURN(1);
-    substitute_base_with_nest_items(this);
+    substitute_base_with_nest_field_items();
   }
 
   if (make_join_select(this, select, conds))

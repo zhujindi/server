@@ -33,35 +33,42 @@ bool get_range_limit_read_cost(const JOIN_TAB *tab, const TABLE *table,
                                ha_rows rows_limit, double *read_time);
 Item **get_sargable_cond(JOIN *join, TABLE *table);
 
+
 /*
-  Substitute base table items with nest's table items
+  @brief
+    Substitute field items of tables inside the sort-nest with sort-nest's
+    field items.
 
-  SYNOPSIS
+  @details
+    Substitute field items of tables inside the sort-nest with sort-nest's
+    field items. This is needed for expressions which would be
+    evaluated in the post ORDER BY context.
 
-  substitute_base_with_nest_items()
-    @param join          the join handler
+    Example:
 
-  DESCRIPTION
-    Substitute base table items for the tables inside the nest
-    with the nest items. This is needed when an expression needs
-    to be evaluated in the post ORDER BY context
+      SELECT * FROM t1, t2, t3
+      WHERE t1.a = t2.a AND t2.b = t3.b AND t1.c > t3.c
+      ORDER BY t1.a,t2.c
+      LIMIT 5;
 
-    Example
-    select * from t1,t2,t3
-      where t1.a=t2.a and t2.b=t3.b
-      order by t1.a,t2.a limit 5;
+    Let's say in this case the join order is t1,t2,t3 and there is a sort-nest
+    on the prefix t1,t2.
 
-    let's say in this case the join order is t1,t2,t3 and this uses a
-    sort-nest. So the actual representation would be sort_nest(t1,t2),t3.
+    Now looking at the WHERE clause, splitting it into 2 parts:
+      (1) t2.b = t3.b AND t1.c > t3.c   ---> condition external to the nest
+      (2) t1.a = t2.a                   ---> condition internal to the nest
 
-    Now look at this equality condition t2.b = t3.b, this would
-    be evaluated in the post ORDER BY context. So t2.b should
-    actually refer to the sort-nest items instead of base table items.
-    This is why we need to substitute base table items with sort-nest items.
+    Now look at the condition in (1), this would be evaluated in the post
+    ORDER BY context.
 
-    For the equality condition t1.a = t2.a there is no need for substitution
-    as this condition is internal to the nest, that is this condition will be
-    evaluated in the pre ORDER BY context.
+    So t2.b and t1.c should actually refer to the sort-nest's field items
+    instead of field items of the tables inside the sort-nest.
+    This is why we need to substitute field items of the tables inside the
+    sort-nest with sort-nest's field items.
+
+    For the condition in (2) there is no need for substitution as this condition
+    is internal to the nest and would be evaluated before we do the sorting
+    for the sort-nest.
 
     This function does the substitution for
       - WHERE clause
@@ -69,16 +76,15 @@ Item **get_sargable_cond(JOIN *join, TABLE *table);
       - ORDER BY clause
       - ON expression
       - REF access items
-
 */
-void substitute_base_with_nest_items(JOIN *join)
-{
-  THD *thd= join->thd;
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  REPLACE_NEST_FIELD_ARG arg= {join};
 
-  List_iterator<Item> it(join->fields_list);
+void JOIN::substitute_base_with_nest_field_items()
+{
+  REPLACE_NEST_FIELD_ARG arg= {this};
+  List_iterator<Item> it(fields_list);
   Item *item, *new_item;
+
+  /* Substituting SELECT list field items with sort-nest's field items */
   while ((item= it++))
   {
     if ((new_item= item->transform(thd,
@@ -91,8 +97,9 @@ void substitute_base_with_nest_items(JOIN *join)
     new_item->update_used_tables();
   }
 
+  /* Substituting ORDER BY field items with sort-nest's field items */
   ORDER *ord;
-  for (ord= join->order; ord ; ord=ord->next)
+  for (ord= order; ord ; ord=ord->next)
   {
     (*ord->item)= (*ord->item)->transform(thd,
                                           &Item::replace_with_nest_items,
@@ -102,33 +109,16 @@ void substitute_base_with_nest_items(JOIN *join)
 
   JOIN_TAB *end_tab= sort_nest_info->nest_tab;
   uint i, j;
-  for (i= join->const_tables + sort_nest_info->n_tables, j=0;
-       i < join->top_join_tab_count; i++, j++)
+  for (i= const_tables + sort_nest_info->n_tables, j=0;
+       i < top_join_tab_count; i++, j++)
   {
     JOIN_TAB *tab= end_tab + j;
+
     if (tab->type == JT_REF || tab->type == JT_EQ_REF ||
         tab->type == JT_REF_OR_NULL)
-    {
-      for (uint keypart= 0; keypart < tab->ref.key_parts; keypart++)
-      {
-        item= tab->ref.items[keypart]->transform(thd,
-                                                 &Item::replace_with_nest_items,
-                                                 TRUE, (uchar *) &arg);
-        if (item != tab->ref.items[keypart])
-        {
-          tab->ref.items[keypart]= item;
-          Item *real_item= item->real_item();
-          store_key *key_copy= tab->ref.key_copy[keypart];
-          if (key_copy->type() == store_key::FIELD_STORE_KEY)
-          {
-            store_key_field *field_copy= ((store_key_field *)key_copy);
-            DBUG_ASSERT(real_item->type() == Item::FIELD_ITEM);
-            field_copy->change_source_field((Item_field *) real_item);
-          }
-        }
-      }
-    }
+      substitute_ref_items(tab);
 
+    /* Substituting ON-EXPR field items with sort-nest's field items */
     if (*tab->on_expr_ref)
     {
       item= (*tab->on_expr_ref)->transform(thd,
@@ -137,40 +127,102 @@ void substitute_base_with_nest_items(JOIN *join)
       *tab->on_expr_ref= item;
       (*tab->on_expr_ref)->update_used_tables();
     }
+
+    /*
+      Substituting REF field items for SJM lookup with sort-nest's field items
+    */
     if (tab->bush_children)
-      substitutions_for_sjm_lookup(join, tab);
+      substitutions_for_sjm_lookup(tab);
   }
 
-  extract_condition_for_the_nest(join);
-  Item *conds= join->conds;
+  extract_condition_for_the_nest();
+
+  /* Substituting WHERE clause's field items with sort-nest's field items */
   if (conds)
   {
     conds= conds->transform(thd, &Item::replace_with_nest_items, TRUE,
                             (uchar *) &arg);
     conds->update_used_tables();
   }
-  join->conds= conds;
 }
 
+/*
+  @brief
+    Substitute ref access field items with sort-nest field items.
 
-void substitutions_for_sjm_lookup(JOIN *join, JOIN_TAB *sjm_tab)
+  @param tab                join tab structure having ref access
+
+*/
+
+void JOIN::substitute_ref_items(JOIN_TAB *tab)
+{
+  REPLACE_NEST_FIELD_ARG arg= {this};
+  Item *item;
+  /* Substituting REF field items with sort-nest's field items */
+  for (uint keypart= 0; keypart < tab->ref.key_parts; keypart++)
+  {
+    item= tab->ref.items[keypart]->transform(thd,
+                                             &Item::replace_with_nest_items,
+                                             TRUE, (uchar *) &arg);
+    if (item != tab->ref.items[keypart])
+    {
+      tab->ref.items[keypart]= item;
+      Item *real_item= item->real_item();
+      store_key *key_copy= tab->ref.key_copy[keypart];
+      if (key_copy->type() == store_key::FIELD_STORE_KEY)
+      {
+        store_key_field *field_copy= ((store_key_field *)key_copy);
+        DBUG_ASSERT(real_item->type() == Item::FIELD_ITEM);
+        field_copy->change_source_field((Item_field *) real_item);
+      }
+    }
+  }
+}
+
+/*
+  @brief
+    Substitute the left expression of the IN subquery with sort-nest
+    field items.
+
+  @param sjm_tab                SJM lookup join tab
+
+  @details
+    This substitution is needed for SJM lookup when the SJM materialized
+    table is outside the sort-nest.
+
+    For example:
+      SELECT t1.a, t2.a
+      FROM  t1, t2
+      WHERE ot1.a in (SELECT it.b FROM it) AND ot1.b = t1.b
+      ORDER BY t1.a desc, ot1.a desc
+      LIMIT 5;
+
+    Lets consider the join order here is t1, t2, <subquery2> and there is a
+    sort-nest on t1, t2. For <subquery2> we do SJM lookup.
+    So for the SJM table there would be a ref access created on the condition
+    t2.a=it.b. But as one can see table t2 is inside the sort-nest and the
+    condition t2.a=it.b can only be evaluated in the post ORDER BY context,
+    so we need to substitute t2.a with the corresponding field item in the
+    sort-nest.
+
+*/
+
+void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab)
 {
   JOIN_TAB *tab= sjm_tab->bush_children->start;
   TABLE_LIST *emb_sj_nest= tab->table->pos_in_table_list->embedding;
 
   /*
-    Walk out of outer join nests until we reach the semi-join nest
-    we're in
+    @see setup_sj_materialization_part1
   */
   while (!emb_sj_nest->sj_mat_info)
     emb_sj_nest= emb_sj_nest->embedding;
   SJ_MATERIALIZATION_INFO *sjm= emb_sj_nest->sj_mat_info;
-  THD *thd= join->thd;
 
   if (!sjm->is_sj_scan)
   {
     Item *left_expr= emb_sj_nest->sj_subq_pred->left_expr;
-    REPLACE_NEST_FIELD_ARG arg= {join};
+    REPLACE_NEST_FIELD_ARG arg= {this};
     left_expr= left_expr->transform(thd, &Item::replace_with_nest_items,
                                     TRUE, (uchar *)&arg);
     left_expr->update_used_tables();
@@ -180,46 +232,48 @@ void substitutions_for_sjm_lookup(JOIN *join, JOIN_TAB *sjm_tab)
 
 
 /*
-  Extract from the WHERE clause the part which is internal to the sort-nest
+  @brief
+    Extract from the WHERE clause the sub-condition which is internal to the
+    sort-nest
 
-  SYNOPSIS
-  extract_condition_for_the_nest()
-    @param join          the join handler
+  @param join          the join handler
 
-  DESCRIPTION
-    Extract the condition from the WHERE clause that can be evaluated by the
-    tables inside the sort-nest.
+  @details
+    Extract the sub-condition from the WHERE clause that can be added to the
+    tables inside the sort-nest and can be evaluated before the sorting is done
+    for the sort-nest.
 
   Example
-    select * from t1,t2,t3
-      where t1.a=t2.a and t2.b=t3.b
-      order by t1.a,t2.a limit 5;
+    SELECT * from t1,t2,t3
+    WHERE t1.a > t2.a        (1)
+     AND  t2.b = t3.b        (2)
+    ORDER BY t1.a,t2.a
+    LIMIT 5;
 
-    let's say in this case the join order is t1,t2,t3 and this uses a
-    sort-nest. So the actual representation would be sort_nest(t1,t2),t3.
+    let's say in this case the join order is t1,t2,t3 and there is a sort-nest
+    on t1,t2
 
-    The WHERE clause is t1.a=t2.a and t2.b=t3.b, so here we like to extract
-    the condition t1.a=t2.a from the WHERE clause because it can be evaluated
-    in the pre ORDER BY contest by the tables that would be in the sort-nest.
+    From the WHERE clause we would like to extract the condition that depends
+    only on the inner tables of the sort-nest. The condition (1) here satisfies
+    this criteria so it would be extracted from the WHERE clause.
+    The extracted condition here would be t1.a > t2.a.
 
-    The extracted condition is stored inside the structure SORT_NEST_INFO.
-    Also we remove the extracted condition from the WHERE clause.
+    The extracted condition is stored inside the SORT_NEST_INFO structure.
+    Also we remove the top level conjuncts of the WHERE clause that were
+    present in the extracted condition.
 
-    So after this call the
-    Extracted condition would be t1.a=t2.a and the
-    WHERE clause would be t2.b=t3.b
+    So after removal the final results would be:
+      WHERE clause:    t2.b = t3.b         ----> condition external to the nest
+      extracted cond:  t1.a > t2.a         ----> condition internal to the nest
 
 */
 
-void extract_condition_for_the_nest(JOIN *join)
+void JOIN::extract_condition_for_the_nest()
 {
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  Item *orig_cond= join->conds;
-  if (!sort_nest_info)
-    return;
-  THD *thd= join->thd;
+  DBUG_ASSERT(sort_nest_info);
+  Item *orig_cond= conds;
   Item *extracted_cond;
-  SELECT_LEX* sl= join->select_lex;
+  SELECT_LEX* sl= select_lex;
 
   /*
     check_cond_extraction_for_nest would set NO_EXTRACTION_FL for
@@ -247,7 +301,7 @@ void extract_condition_for_the_nest(JOIN *join)
     orig_cond= remove_pushed_top_conjuncts(thd, orig_cond);
     sort_nest_info->nest_cond= extracted_cond;
   }
-  join->conds= orig_cond;
+  conds= orig_cond;
 }
 
 
@@ -501,12 +555,12 @@ bool JOIN::create_sort_nest_info(uint n_tables)
 
   @param join          the join handler
 
-  DESCRIPTION
-  Setup execution structures for sort-nest materialization:
-    - Create the list of Items that are needed by the sort-nest
-    - Create the materialization temporary table for the sort-nest
+  @details
+    Setup execution structures for sort-nest materialization:
+      - Create the list of Items that are needed by the sort-nest
+      - Create the materialization temporary table for the sort-nest
 
-  This function fills up the SORT_NEST_INFO structure
+    This function fills up the SORT_NEST_INFO structure
 
   @retval
     TRUE   : In case of error
@@ -525,13 +579,17 @@ bool JOIN::make_sort_nest()
     add_sort_nest_tables_to_trace(this);
 
   /*
-    Here a list of base table items are created that are needed to be stored
-    inside the temporary table of the sort-nest. Currently Item_field objects
-    are created for the base table fields that are set in the bitmap of
-    read_set.
-    TODO: in final implementation we can try to remove the fields from this
-    list that are completely internal to the nest as they are not needed
-    in the post ORDER BY context.
+    List of field items of the tables inside the sort-nest is created for
+    the field items that are needed to be stored inside the temporary table
+    of the sort-nest. Currently Item_field objects are created for the tables
+    inside the sort-nest for all the  fields which have bitmap read_set
+    set for them.
+
+    TODO varun:
+    An improvement would be if to remove the fields from this
+    list that are completely internal to the nest because such
+    fields would not be used in computing expression in the post
+    ORDER BY context
   */
 
   for (j= join_tab + const_tables; j < sort_nest_info->nest_tab; j++)
@@ -544,9 +602,7 @@ bool JOIN::make_sort_nest()
       emb_sj_nest= child_tab->table->pos_in_table_list->embedding;
 
       /*
-        Walk out of outer join nests until we reach the semi-join
-        nest we're in
-        Picked from setup_sj_materialization_part1
+        @see setup_sj_materialization_part1
       */
       while (!emb_sj_nest->sj_mat_info)
         emb_sj_nest= emb_sj_nest->embedding;
@@ -629,9 +685,7 @@ bool JOIN::make_sort_nest()
     sort_nest_info->nest_temp_table_cols.push_back(item, thd->mem_root);
   }
 
-  /*
-    Setting up the scan on the temp table
-  */
+  /* Setting up the scan on the temp table */
   tab->read_first_record= join_init_read_record;
   tab->read_record.read_record_func= rr_sequential;
   tab[-1].next_select= end_nest_materialization;
@@ -642,7 +696,7 @@ bool JOIN::make_sort_nest()
 
 
 /*
-  Calcualte the cost of adding a sort-nest to the join.
+  Calculate the cost of adding a sort-nest to the join.
 
   SYNOPSIS
 
