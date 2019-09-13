@@ -9580,7 +9580,7 @@ best_extension_by_limited_search(JOIN      *join,
         sort_nest_operation_here is set when we check if ordering is achieved
         in the sort-nest branch of best_extension_by_limited_search.
       */
-      if (!idx && join->sort_nest_possible && join->get_cardinality_estimate &&
+      if (!idx && join->sort_nest_possible && !join->get_cardinality_estimate &&
           index_satisfies_ordering(s, index_used))
       {
         if (s->table->force_index)
