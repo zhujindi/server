@@ -2503,7 +2503,7 @@ int JOIN::optimize_stage2()
 
   if (sort_nest_needed())
   {
-    if (setup_sort_nest(this))
+    if (make_sort_nest())
       DBUG_RETURN(1);
     substitute_base_with_nest_items(this);
   }

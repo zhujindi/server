@@ -496,36 +496,33 @@ bool JOIN::create_sort_nest_info(uint n_tables)
 
 
 /*
-  Setup the sort-nest struture
+  @brief
+    Make the sort-nest.
 
-  SYNOPSIS
-
-  setup_sort_nest()
-    @param join          the join handler
+  @param join          the join handler
 
   DESCRIPTION
-    Setup execution structures for sort-nest materialization:
+  Setup execution structures for sort-nest materialization:
     - Create the list of Items that are needed by the sort-nest
     - Create the materialization temporary table for the sort-nest
+
+  This function fills up the SORT_NEST_INFO structure
 
   @retval
     TRUE   : In case of error
     FALSE  : Nest creation successful
 */
 
-bool setup_sort_nest(JOIN *join)
+bool JOIN::make_sort_nest()
 {
-
-  SORT_NEST_INFO* sort_nest_info= join->sort_nest_info;
-  THD *thd= join->thd;
   Field_iterator_table field_iterator;
 
-  JOIN_TAB *start_tab= join->join_tab+join->const_tables, *j, *tab;
-  tab= sort_nest_info->nest_tab;
+  JOIN_TAB *j;
+  JOIN_TAB *tab;
   sort_nest_info->nest_tables_map= 0;
 
   if (unlikely(thd->trace_started()))
-    add_sort_nest_tables_to_trace(join);
+    add_sort_nest_tables_to_trace(this);
 
   /*
     Here a list of base table items are created that are needed to be stored
@@ -537,7 +534,7 @@ bool setup_sort_nest(JOIN *join)
     in the post ORDER BY context.
   */
 
-  for (j= start_tab; j < tab; j++)
+  for (j= join_tab + const_tables; j < sort_nest_info->nest_tab; j++)
   {
     sort_nest_info->nest_tables_map|= j->table->map;
     if (j->bush_children)
@@ -577,21 +574,22 @@ bool setup_sort_nest(JOIN *join)
     }
   }
 
-  ORDER *order;
+  ORDER *ord;
   /*
     Substitute the ORDER by items with the best field so that equality
     propagation considered during best_access_path can be used.
   */
-  for (order= join->order; order; order=order->next)
+  for (ord= order; ord; ord=ord->next)
   {
-    Item *item= order->item[0];
+    Item *item= ord->item[0];
     item= substitute_for_best_equal_field(thd, NO_PARTICULAR_TAB, item,
-                                          join->cond_equal,
-                                          join->map2table, true);
+                                          cond_equal,
+                                          map2table, true);
     item->update_used_tables();
-    order->item[0]= item;
+    ord->item[0]= item;
   }
 
+  tab= sort_nest_info->nest_tab;
   DBUG_ASSERT(!tab->table);
 
   uint sort_nest_elements= sort_nest_info->nest_base_table_cols.elements;

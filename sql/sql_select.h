@@ -1679,16 +1679,6 @@ public:
     return exec_join_tab_cnt() + aggr_tables - 1;
   }
 
-  /*
-    TRUE   if the sort-nest contains more than one table
-    FALSE  otherwise
-  */
-  bool sort_nest_needed()
-  {
-    DBUG_ASSERT(sort_nest_info);
-    return sort_nest_info->n_tables == 1 ? FALSE : TRUE;
-  }
-
   int prepare(TABLE_LIST *tables, uint wind_num,
 	      COND *conds, uint og_num, ORDER *order, bool skip_order_by,
               ORDER *group, Item *having, ORDER *proc_param, SELECT_LEX *select,
@@ -1826,12 +1816,24 @@ public:
             (rollup.state != ROLLUP::STATE_NONE && select_distinct));
   }
 
+  /*
+    TRUE   if the sort-nest contains more than one table
+    FALSE  otherwise
+  */
+  bool sort_nest_needed()
+  {
+    if (!sort_nest_info)
+      return FALSE;
+    return sort_nest_info->n_tables == 1 ? FALSE : TRUE;
+  }
+
   bool sort_nest_allowed();
   bool is_order_by_expensive();
   bool estimate_cardinality(table_map joined_tables);
   bool check_if_sort_nest_present(uint* n_tables);
   bool create_sort_nest_info(uint n_tables);
   bool remove_const_from_order_by();
+  bool make_sort_nest();
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -2181,7 +2183,6 @@ double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order);
 bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
                                          table_map previous_tables);
-bool setup_sort_nest(JOIN *join);
 void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab);
 double sort_nest_oper_cost(JOIN *join, double join_record_count,
                            ulong rec_len, uint idx);
