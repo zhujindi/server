@@ -1829,7 +1829,7 @@ public:
   bool sort_nest_allowed();
   bool is_order_by_expensive();
   bool estimate_cardinality(table_map joined_tables);
-  uint check_if_sort_nest_present(uint *n_tables);
+  bool check_if_sort_nest_present(uint* n_tables);
   bool create_sort_nest_info(uint n_tables);
   bool remove_const_from_order_by();
   bool choose_subquery_plan(table_map join_tables);

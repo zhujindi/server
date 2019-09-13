@@ -414,38 +414,84 @@ bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
 
 
 /*
-  Checks if it is possible to create a sort nest, if yes
-  then it creates the structure for sort-nest
-  that includes the number of tables inside the sort-nest
+  @brief
+    Check if the best plan has a sort-nest or not.
+
+  @param
+    n_tables[out]             set to the number of tables inside the sort-nest
+
+  @details
+    This function walks through the JOIN::best_positions array
+    which holds the best plan and checks if there is prefix for
+    which the join planner had picked a sort-nest.
+
+    Also this function computes a table map for tables that allow
+    join buffering. When a sort-nest is found tables following
+    the sort-nest cannout use join buffering, as join buffering
+    does not ensure that ordering will be mainitained.
+
+  @retval
+    TRUE  sort-nest present
+    FALSE no sort-nest present
 */
 
-bool create_sort_nest_if_needed(JOIN *join)
+bool JOIN::check_if_sort_nest_present(uint* n_tables)
 {
-  uint tablenr, n_tables=0;
-  uint table_count= join->table_count;
-  for (tablenr=join->const_tables ; tablenr < table_count ; tablenr++)
+  uint tablenr;
+  table_map tables_with_buffering_allowed= 0;
+  bool sort_nest_found= FALSE;
+  uint tables= 0;
+  for (tablenr=const_tables ; tablenr < table_count ; tablenr++)
   {
-    POSITION *pos= &join->best_positions[tablenr];
-    n_tables++;
+    tables++;
+    POSITION *pos= &best_positions[tablenr];
     if (pos->sj_strategy == SJ_OPT_MATERIALIZE ||
         pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN)
     {
       SJ_MATERIALIZATION_INFO *sjm= pos->table->emb_sj_nest->sj_mat_info;
+      for (uint j= 1; j < sjm->tables; j++)
+      {
+        JOIN_TAB *tab= (pos+j)->table;
+        tables_with_buffering_allowed|= tab->table->map;
+      }
       tablenr+= (sjm->tables-1);
     }
+    else
+    {
+      if (!sort_nest_found)
+        tables_with_buffering_allowed|= pos->table->table->map;
+    }
+
     if (pos->sort_nest_operation_here)
     {
-      SORT_NEST_INFO *sort_nest_info;
-      if (!(sort_nest_info= new SORT_NEST_INFO()))
-        return TRUE;
-      sort_nest_info->n_tables= n_tables;
-      join->sort_nest_info= sort_nest_info;
-      sort_nest_info->index_used= pos->index_no;
-      DBUG_ASSERT(sort_nest_info->n_tables != 0);
-      return FALSE;
+      DBUG_ASSERT(!sort_nest_found);
+      sort_nest_found= TRUE;
+      *n_tables= tables;
     }
   }
-  return FALSE;
+  return sort_nest_found;
+}
+
+
+/*
+  @brief
+    Create a sort nest info structure, that would store all the details
+    about the sort-nest.
+
+  @param n_tables         number of tables inside the sort-nest
+
+  @retval
+    FALSE     successful in creating the sort-nest info structure
+    TRUE      error
+*/
+
+bool JOIN::create_sort_nest_info(uint n_tables)
+{
+  if (!(sort_nest_info= new SORT_NEST_INFO()))
+    return TRUE;
+  sort_nest_info->n_tables= n_tables;
+  sort_nest_info->index_used= -1;
+  return sort_nest_info == NULL;
 }
 
 
@@ -1011,4 +1057,46 @@ void set_fraction_output_for_nest(JOIN *join, double *cardinality)
                           join->fraction_output_for_nest*100);
 
   }
+}
+
+
+/*
+  Sort nest is needed currently when one can shortcut the join execution.
+
+  So for the operations where one requires entire join computation to be
+  done first and then apply the operation on the join output,
+  such operations can't make use of the sort-nest.
+  So this function disables the use of sort-nest for such operations.
+
+  Sort nest is not allowed for
+  1) ORDER clause is not present
+  2) Only constant tables in the join
+  3) DISTINCT clause
+  4) GROUP BY CLAUSE
+  5) HAVING clause (that was not pushed to where)
+  6) Aggregate Functions
+  7) Window Functions
+  8) Using ROLLUP
+  9) Using SQL_BUFFER_RESULT
+  10) LIMIT is present
+  11) Only Select queries can use the sort nest
+
+  Returns
+   TRUE if sort-nest is allowed
+   FALSE otherwise
+
+*/
+
+bool JOIN::sort_nest_allowed()
+{
+  return thd->variables.use_sort_nest && order &&
+         !(const_tables == table_count ||
+           (select_distinct || group_list) ||
+           having  ||
+           MY_TEST(select_options & OPTION_BUFFER_RESULT) ||
+           (rollup.state != ROLLUP::STATE_NONE && select_distinct) ||
+           select_lex->window_specs.elements > 0 ||
+           select_lex->agg_func_used() ||
+           select_limit == HA_POS_ERROR ||
+           thd->lex->sql_command != SQLCOM_SELECT);
 }

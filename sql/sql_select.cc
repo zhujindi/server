@@ -10467,6 +10467,7 @@ bool JOIN::get_best_combination()
   table_map used_tables;
   JOIN_TAB *j;
   KEYUSE *keyuse;
+  uint n_tables;
   DBUG_ENTER("get_best_combination");
 
    /*
@@ -10505,15 +10506,15 @@ bool JOIN::get_best_combination()
 
   fix_semijoin_strategies_for_picked_join_order(this);
 
-  if (create_sort_nest_if_needed(this))
-    DBUG_RETURN(TRUE);
-
   for (j=join_tab, tablenr=0 ; tablenr < top_join_tab_count + aggr_tables;
        tablenr++,j++)
     bzero((void*)j, sizeof(JOIN_TAB));
 
-  if (sort_nest_info)
+  if (check_if_sort_nest_present(&n_tables))
   {
+    if (create_sort_nest_info(n_tables))
+      DBUG_RETURN(TRUE);
+
     if (sort_nest_needed())
       join_tab[const_tables + sort_nest_info->n_tables].is_sort_nest= TRUE;
     else
