@@ -917,6 +917,8 @@ bool setup_range_scan(JOIN *join, JOIN_TAB *tab, uint idx, double records)
     int err, rc, direction;
     uint used_key_parts;
     key_map keymap_for_range;
+    THD *thd= join->thd;
+    Json_writer_array forcing_range(thd, "range_scan_for_order_by_limit");
 
     /*
       TODO(varun)
