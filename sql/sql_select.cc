@@ -10471,6 +10471,7 @@ bool JOIN::get_best_combination()
   JOIN_TAB *j;
   KEYUSE *keyuse;
   uint n_tables;
+  table_map nest_tables_map= 0;
   DBUG_ENTER("get_best_combination");
 
    /*
@@ -10513,9 +10514,9 @@ bool JOIN::get_best_combination()
        tablenr++,j++)
     bzero((void*)j, sizeof(JOIN_TAB));
 
-  if (check_if_sort_nest_present(&n_tables))
+  if (check_if_sort_nest_present(&n_tables, &nest_tables_map))
   {
-    if (create_sort_nest_info(n_tables))
+    if (create_sort_nest_info(n_tables, nest_tables_map))
       DBUG_RETURN(TRUE);
 
     if (sort_nest_needed())
@@ -12782,8 +12783,8 @@ uint check_join_cache_usage(JOIN_TAB *tab,
     return 0;
 
 
-  if (join->sort_nest_info && !check_if_join_buffering_needed(join, tab))
-    goto no_join_cache;
+  if (!join->is_join_buffering_allowed(tab))
+    return 0;
 
   if (force_unlinked_cache && (cache_level%2 == 0))
     cache_level--;

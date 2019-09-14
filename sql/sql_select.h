@@ -1831,8 +1831,8 @@ public:
   bool sort_nest_allowed();
   bool is_order_by_expensive();
   bool estimate_cardinality(table_map joined_tables);
-  bool check_if_sort_nest_present(uint* n_tables);
-  bool create_sort_nest_info(uint n_tables);
+  bool check_if_sort_nest_present(uint* n_tables, table_map *tables_map);
+  bool create_sort_nest_info(uint n_tables, table_map nest_tables_map);
   bool remove_const_from_order_by();
   bool make_sort_nest();
   double calculate_record_count_for_sort_nest(uint n_tables);
@@ -1844,6 +1844,7 @@ public:
   void find_keys_that_can_achieve_ordering(TABLE *table);
   void setup_index_use_for_ordering(int index_no);
   void setup_range_scan(JOIN_TAB *tab, uint idx, double records);
+  bool is_join_buffering_allowed(JOIN_TAB *tab);
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -2200,7 +2201,6 @@ void check_cond_extraction_for_nest(THD *thd, Item *cond,
 int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
                                       double *records, double cardinality,
                                       int index_used, uint idx);
-bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab);
 bool check_if_index_satisfies_ordering(TABLE *table, int index_used);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
 void set_fraction_output_for_nest(JOIN *join, double *cardinality);

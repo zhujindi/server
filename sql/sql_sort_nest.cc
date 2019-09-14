@@ -404,27 +404,25 @@ bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
 
   @param
     n_tables[out]             set to the number of tables inside the sort-nest
-
+    nest_tables_map[out]      map of tables inside the sort-nest
   @details
     This function walks through the JOIN::best_positions array
     which holds the best plan and checks if there is prefix for
     which the join planner had picked a sort-nest.
 
-    Also this function computes a table map for tables that allow
-    join buffering. When a sort-nest is found tables following
-    the sort-nest cannot use join buffering, as join buffering
-    does not ensure that ordering will be maintained.
+    Also this function computes a table map for tables that are inside the
+    sort-nest
 
   @retval
     TRUE  sort-nest present
     FALSE no sort-nest present
 */
 
-bool JOIN::check_if_sort_nest_present(uint* n_tables)
+bool JOIN::check_if_sort_nest_present(uint* n_tables,
+                                      table_map *nest_tables_map)
 {
   uint tablenr;
-  table_map tables_with_buffering_allowed= 0;
-  bool sort_nest_found= FALSE;
+  table_map nest_tables= 0;
   uint tables= 0;
   for (tablenr=const_tables ; tablenr < table_count ; tablenr++)
   {
@@ -437,24 +435,21 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables)
       for (uint j= 1; j < sjm->tables; j++)
       {
         JOIN_TAB *tab= (pos+j)->table;
-        tables_with_buffering_allowed|= tab->table->map;
+        nest_tables|= tab->table->map;
       }
       tablenr+= (sjm->tables-1);
     }
     else
-    {
-      if (!sort_nest_found)
-        tables_with_buffering_allowed|= pos->table->table->map;
-    }
+      nest_tables|= pos->table->table->map;
 
     if (pos->sort_nest_operation_here)
     {
-      DBUG_ASSERT(!sort_nest_found);
-      sort_nest_found= TRUE;
       *n_tables= tables;
+      *nest_tables_map= nest_tables;
+      return TRUE;
     }
   }
-  return sort_nest_found;
+  return FALSE;
 }
 
 
@@ -462,7 +457,8 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables)
   @brief
     Create a sort nest info structure
 
-  @param n_tables         number of tables inside the sort-nest
+  @param n_tables          number of tables inside the sort-nest
+  @param nest_tables_map   map of top level tables inside the sort-nest
 
   @details
     This sort-nest structure would hold all the information about the sort-nest.
@@ -472,12 +468,13 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables)
     TRUE      error
 */
 
-bool JOIN::create_sort_nest_info(uint n_tables)
+bool JOIN::create_sort_nest_info(uint n_tables, table_map nest_tables_map)
 {
   if (!(sort_nest_info= new SORT_NEST_INFO()))
     return TRUE;
   sort_nest_info->n_tables= n_tables;
   sort_nest_info->index_used= -1;
+  sort_nest_info->nest_tables_map= nest_tables_map;
   return sort_nest_info == NULL;
 }
 
@@ -507,7 +504,6 @@ bool JOIN::make_sort_nest()
 
   JOIN_TAB *j;
   JOIN_TAB *tab;
-  sort_nest_info->nest_tables_map= 0;
 
   if (unlikely(thd->trace_started()))
     add_sort_nest_tables_to_trace(this);
@@ -528,26 +524,7 @@ bool JOIN::make_sort_nest()
 
   for (j= join_tab + const_tables; j < sort_nest_info->nest_tab; j++)
   {
-    sort_nest_info->nest_tables_map|= j->table->map;
-    if (j->bush_children)
-    {
-      TABLE_LIST *emb_sj_nest;
-      JOIN_TAB *child_tab= j->bush_children->start;
-      emb_sj_nest= child_tab->table->pos_in_table_list->embedding;
-
-      /*
-        @see setup_sj_materialization_part1
-      */
-      while (!emb_sj_nest->sj_mat_info)
-        emb_sj_nest= emb_sj_nest->embedding;
-      Item_in_subselect *item_sub= emb_sj_nest->sj_subq_pred;
-      SELECT_LEX *subq_select= item_sub->unit->first_select();
-      List_iterator_fast<Item> li(subq_select->item_list);
-      Item *item;
-      while((item= li++))
-        sort_nest_info->nest_base_table_cols.push_back(item, thd->mem_root);
-    }
-    else
+    if (!j->bush_children)
     {
       TABLE *table= j->table;
       field_iterator.set_table(table);
@@ -561,6 +538,23 @@ bool JOIN::make_sort_nest()
           return TRUE;
         sort_nest_info->nest_base_table_cols.push_back(item, thd->mem_root);
       }
+    }
+    else
+    {
+      TABLE_LIST *emb_sj_nest;
+      JOIN_TAB *child_tab= j->bush_children->start;
+      emb_sj_nest= child_tab->table->pos_in_table_list->embedding;
+      /*
+        @see setup_sj_materialization_part1
+      */
+      while (!emb_sj_nest->sj_mat_info)
+        emb_sj_nest= emb_sj_nest->embedding;
+      Item_in_subselect *item_sub= emb_sj_nest->sj_subq_pred;
+      SELECT_LEX *subq_select= item_sub->unit->first_select();
+      List_iterator_fast<Item> li(subq_select->item_list);
+      Item *item;
+      while((item= li++))
+        sort_nest_info->nest_base_table_cols.push_back(item, thd->mem_root);
     }
   }
 
@@ -897,20 +891,41 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
 
 /*
   @brief
-   Disable join buffering for all the tables at the top level that come after
-   sorting has been performed.
+    Disallow join buffering for all the tables at the top level that are read
+    after sorting has been performed.
+
+  @param
+    tab                      table to check if join buffering is allowed or not
+
+  @details
+    Disallow join buffering for all the tables at the top level that are read
+    after sorting is done.
+    There are 2 cases
+      1) Sorting on the first non-const table
+         For all the tables join buffering is not allowed
+      2) Sorting on a prefix of the join with a sort-nest
+         For the tables inside the sort-nest join buffering is allowed but
+         for tables outside the sort-nest join buffering is not allowed
+
+    Also for SJM table that come after the sort-nest, join buffering is allowed
+    for the inner tables of the SJM.
+
+  @retval
+
 */
 
-bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab)
+bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
 {
-  JOIN_TAB *end= join->join_tab+join->top_join_tab_count;
-  JOIN_TAB *start= join->sort_nest_info->nest_tab;
-  for (JOIN_TAB *j= start; j < end; j++)
-  {
-    if (j == tab)
-      return FALSE;
-  }
-  return TRUE;
+  if (!sort_nest_info)
+    return TRUE;
+
+  // no need to disable join buffering for the inner tables of SJM
+  if (tab->bush_root_tab)
+    return TRUE;
+
+  if (tab->table->map & sort_nest_info->nest_tables_map)
+    return TRUE;
+  return FALSE;
 }
 
 
