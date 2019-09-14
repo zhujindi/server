@@ -353,19 +353,19 @@ void JOIN::propagate_equal_field_for_orderby()
         multiple equality the item belongs to and set item->item_equal
         accordingly.
       */
-      (void)item->propagate_equal_fields(join->thd,
+      (void)item->propagate_equal_fields(thd,
                                          Value_source::
                                          Context_identity(),
-                                         join->cond_equal);
+                                         cond_equal);
     }
   }
 }
 
 
 /*
-  Checks if by considering the current join_tab
-  would the prefix of the join order satisfy
-  the ORDER BY clause.
+  @brief
+    Checks if the current prefix of the join order satisfies the ORDER BY
+    clause or not.
 
   @param join             JOIN handler
   @param join_tab         joined table to check if addition of this

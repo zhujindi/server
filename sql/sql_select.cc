@@ -9688,12 +9688,14 @@ best_extension_by_limited_search(JOIN      *join,
           limit_applied_to_nest= TRUE;
 
         /*
-          Do we really need to disable sort_nest when we are picking
-          the plan for a semi-join.
-          TODO(varun) get an optimizer switch to enable or disable the sort
-          nest
+          TODO varun:
+            1) get an optimizer switch to enable or disable the sort
+               nest instead of a system variable
+            2) add a parameter to best_extension_by_limited_search so that
+               we don't call check_join_prefix_contains_ordering if the prefix
+               already satisfied the ordering.
         */
-        if (!nest_created && !join->emb_sjm_nest && join->order &&
+        if (!nest_created && join->order &&
             nest_allow && join->sort_nest_possible &&
             !join->get_cardinality_estimate &&
             check_join_prefix_contains_ordering(join, s, sort_nest_tables))
