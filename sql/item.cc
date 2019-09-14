@@ -7245,7 +7245,7 @@ Item *Item_field::update_value_transformer(THD *thd, uchar *select_arg)
   @note
     This method is called for pushdown conditions into materialized
     derived tables/views optimization.
-    Item::pushable_cond_checker_for_derived() is passed as the actual callback
+    Item::pushable_cond_checker_for_tables() is passed as the actual callback
     function.
     Also it is called for pushdown conditions in materialized IN subqueries.
     Item::pushable_cond_checker_for_subquery is passed as the actual
@@ -9111,16 +9111,12 @@ Item *Item_direct_view_ref::replace_equal_field(THD *thd, uchar *arg)
 }
 
 
-bool Item_field::excl_dep_on_table(table_map tab_map)
+bool Item_field::excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
 {
   return !(used_tables() & ~tab_map) ||
-         (item_equal && (item_equal->used_tables() & tab_map));
-}
-
-
-bool Item_field::excl_dep_on_nest(table_map tab_map)
-{
-  return !(used_tables() & ~tab_map);
+         (multi_eq_checked ?
+          FALSE:
+          (item_equal && (item_equal->used_tables() & tab_map)));
 }
 
 
@@ -9131,7 +9127,8 @@ Item_field::excl_dep_on_grouping_fields(st_select_lex *sel)
 }
 
 
-bool Item_direct_view_ref::excl_dep_on_table(table_map tab_map)
+bool Item_direct_view_ref::excl_dep_on_tables(table_map tab_map,
+                                              bool multi_eq_checked)
 {
   table_map used= used_tables();
   if (used & OUTER_REF_TABLE_BIT)
@@ -9143,18 +9140,7 @@ bool Item_direct_view_ref::excl_dep_on_table(table_map tab_map)
     DBUG_ASSERT(real_item()->type() == Item::FIELD_ITEM);
     return item_equal->used_tables() & tab_map;
   }
-  return (*ref)->excl_dep_on_table(tab_map);
-}
-
-
-bool Item_direct_view_ref::excl_dep_on_nest(table_map tab_map)
-{
-  table_map used= used_tables();
-  if (used & OUTER_REF_TABLE_BIT)
-    return false;
-  if (!(used & ~tab_map))
-    return true;
-  return (*ref)->excl_dep_on_nest(tab_map);
+  return (*ref)->excl_dep_on_tables(tab_map, multi_eq_checked);
 }
 
 

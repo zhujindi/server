@@ -445,6 +445,12 @@ typedef struct replace_equal_field_arg
   struct st_join_table *context_tab;
 } REPLACE_EQUAL_FIELD_ARG;
 
+typedef struct check_pushdown_field_arg
+{
+  table_map tables_map;
+  bool multi_eq_checked;
+} CHECK_PUSHDOWN_FIELD_ARG;
+
 typedef struct replace_nest_field_arg
 {
   JOIN *join;
@@ -1895,14 +1901,15 @@ public:
     TRUE if the expression depends only on the table indicated by tab_map
     or can be converted to such an exression using equalities.
     Not to be used for AND/OR formulas.
-  */
-  virtual bool excl_dep_on_table(table_map tab_map) { return false; }
 
-  /*
-    TRUE if the expression depends only on the tables indicated by tab_map.
-    Not to be used for AND/OR formulas.
+    @param multi_eq_checked       set to TRUE if substitution for best field
+                                  item inside the multiple equality is already
+                                  done
+    TODO varun: change the function name to excl_dep_on_tables
   */
-  virtual bool excl_dep_on_nest(table_map tab_map) { return false; }
+  virtual bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
+  { return false; }
+
   /*
     TRUE if the expression depends only on grouping fields of sel
     or can be converted to such an expression using equalities.
@@ -2324,13 +2331,10 @@ public:
     marker &= ~EXTRACTION_MASK;
   }
   void check_pushable_cond(Pushdown_checker excl_dep_func, uchar *arg);
-  bool pushable_cond_checker_for_derived(uchar *arg)
+  bool pushable_cond_checker_for_tables(uchar *arg)
   {
-    return excl_dep_on_table(*((table_map *)arg));
-  }
-  bool pushable_cond_checker_for_nest(uchar *arg)
-  {
-    return excl_dep_on_nest(*((table_map *)arg));
+    CHECK_PUSHDOWN_FIELD_ARG *param= (CHECK_PUSHDOWN_FIELD_ARG*)arg;
+    return excl_dep_on_tables(param->tables_map, param->multi_eq_checked);
   }
   bool pushable_cond_checker_for_subquery(uchar *arg)
   {
@@ -2470,24 +2474,13 @@ protected:
   bool transform_args(THD *thd, Item_transformer transformer,
                       bool transform_subquery, uchar *arg);
   void propagate_equal_fields(THD *, const Item::Context &, COND_EQUAL *);
-  bool excl_dep_on_table(table_map tab_map)
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
   {
     for (uint i= 0; i < arg_count; i++)
     {
       if (args[i]->const_item())
         continue;
-      if (!args[i]->excl_dep_on_table(tab_map))
-        return false;
-    }
-    return true;
-  }
-  bool excl_dep_on_nest(table_map tab_map)
-  {
-    for (uint i= 0; i < arg_count; i++)
-    {
-      if (args[i]->const_item())
-        continue;
-      if (!args[i]->excl_dep_on_nest(tab_map))
+      if (!args[i]->excl_dep_on_tables(tab_map, multi_eq_checked))
         return false;
     }
     return true;
@@ -3436,8 +3429,7 @@ public:
   Item *in_subq_field_transformer_for_where(THD *thd, uchar *arg);
   Item *in_subq_field_transformer_for_having(THD *thd, uchar *arg);
   virtual void print(String *str, enum_query_type query_type);
-  bool excl_dep_on_table(table_map tab_map);
-  bool excl_dep_on_nest(table_map tab_map);
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked);
   bool excl_dep_on_grouping_fields(st_select_lex *sel);
   bool excl_dep_on_in_subq_left_part(Item_in_subselect *subq_pred);
   bool cleanup_excluding_fields_processor(void *arg)
@@ -5278,20 +5270,13 @@ public:
   }
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_ref>(thd, this); }
-  bool excl_dep_on_table(table_map tab_map)
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
   { 
     table_map used= used_tables();
     if (used & OUTER_REF_TABLE_BIT)
       return false;
-    return (used == tab_map) || (*ref)->excl_dep_on_table(tab_map);
-  }
-
-  bool excl_dep_on_nest(table_map tab_map)
-  {
-    table_map used= used_tables();
-    if (used & OUTER_REF_TABLE_BIT)
-      return false;
-    return (!(used & ~tab_map) || (*ref)->excl_dep_on_nest(tab_map));
+    return (!(used & ~tab_map) ||
+            (*ref)->excl_dep_on_tables(tab_map, multi_eq_checked));
   }
 
   bool excl_dep_on_grouping_fields(st_select_lex *sel)
@@ -5619,8 +5604,7 @@ public:
       view_arg->view_used_tables|= (*ref)->used_tables();
     return 0;
   }
-  bool excl_dep_on_table(table_map tab_map);
-  bool excl_dep_on_nest(table_map tab_map);
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked);
   bool excl_dep_on_grouping_fields(st_select_lex *sel);
   bool excl_dep_on_in_subq_left_part(Item_in_subselect *subq_pred);
   Item *derived_field_transformer_for_having(THD *thd, uchar *arg);

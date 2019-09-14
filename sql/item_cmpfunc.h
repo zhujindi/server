@@ -3012,8 +3012,7 @@ public:
                 Item_transformer transformer, uchar *arg_t);
   bool eval_not_null_tables(void *opt_arg);
   Item *build_clone(THD *thd);
-  bool excl_dep_on_table(table_map tab_map);
-  bool excl_dep_on_nest(table_map tab_map);
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked);
   bool excl_dep_on_grouping_fields(st_select_lex *sel);
 };
 
@@ -3198,7 +3197,7 @@ public:
     This does not comply with the specification of the virtual method,
     but Item_equal items are processed distinguishly anyway
   */
-  bool excl_dep_on_table(table_map tab_map)
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
   {
     return used_tables() & tab_map;
   }

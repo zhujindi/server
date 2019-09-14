@@ -5232,7 +5232,7 @@ Item *Item_cond::build_clone(THD *thd)
 }
 
 
-bool Item_cond::excl_dep_on_table(table_map tab_map)
+bool Item_cond::excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
 {
   if (used_tables() & OUTER_REF_TABLE_BIT)
     return false;
@@ -5242,23 +5242,7 @@ bool Item_cond::excl_dep_on_table(table_map tab_map)
   Item *item;
   while ((item= li++))
   {
-    if (!item->excl_dep_on_table(tab_map))
-      return false;
-  }
-  return true;
-}
-
-bool Item_cond::excl_dep_on_nest(table_map tab_map)
-{
-  if (used_tables() & OUTER_REF_TABLE_BIT)
-    return false;
-  if (!(used_tables() & ~tab_map))
-    return true;
-  List_iterator_fast<Item> li(list);
-  Item *item;
-  while ((item= li++))
-  {
-    if (!item->excl_dep_on_nest(tab_map))
+    if (!item->excl_dep_on_tables(tab_map, multi_eq_checked))
       return false;
   }
   return true;

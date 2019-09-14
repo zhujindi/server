@@ -277,15 +277,24 @@ void JOIN::extract_condition_for_the_nest()
 
   /*
     check_cond_extraction_for_nest would set NO_EXTRACTION_FL for
-    all the items that cannot be added to the inner tables of the nest
+    all the items that cannot be added to the inner tables of the nest.
+    TODO varun:
+      -try replacing it with check_pushable_cond, looks similar
+      -change name of pushable_cond_checker_for_derived
   */
+  CHECK_PUSHDOWN_FIELD_ARG arg= {sort_nest_info->nest_tables_map, TRUE};
   check_cond_extraction_for_nest(thd, orig_cond,
-                                 &Item::pushable_cond_checker_for_nest,
-                                 (uchar *)(&sort_nest_info->nest_tables_map));
+                                 &Item::pushable_cond_checker_for_tables,
+                                 (uchar *)&arg);
   /*
     build_cond_for_grouping_fields would create the entire
     condition that would be added to the tables inside the nest.
     This may clone some items too.
+  */
+
+  /*
+    TODO varun: need to re-factor this too, we need to make this function
+    part of the Item class , no need to have it in SELECT LEX
   */
   extracted_cond= sl->build_cond_for_grouping_fields(thd, orig_cond, TRUE);
 
@@ -458,7 +467,8 @@ bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
     Item *order_item= order->item[0];
     table_map order_tables=order_item->used_tables();
     if (!(order_tables & ~previous_tables) ||
-         (order_item->excl_dep_on_table(previous_tables | tab->table->map)))
+         (order_item->excl_dep_on_tables(previous_tables | tab->table->map,
+                                         FALSE)))
       continue;
     else
       return FALSE;

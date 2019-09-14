@@ -136,14 +136,9 @@ public:
     return this;
   }
 
-  bool excl_dep_on_table(table_map tab_map)
+  bool excl_dep_on_tables(table_map tab_map, bool multi_eq_checked)
   {
-    return Item_args::excl_dep_on_table(tab_map);
-  }
-
-  bool excl_dep_on_nest(table_map tab_map)
-  {
-    return Item_args::excl_dep_on_nest(tab_map);
+    return Item_args::excl_dep_on_tables(tab_map, multi_eq_checked);
   }
 
   bool excl_dep_on_grouping_fields(st_select_lex *sel)
