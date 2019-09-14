@@ -80,7 +80,6 @@ Item **get_sargable_cond(JOIN *join, TABLE *table);
 
 void JOIN::substitute_base_with_nest_field_items()
 {
-  REPLACE_NEST_FIELD_ARG arg= {this};
   List_iterator<Item> it(fields_list);
   Item *item, *new_item;
 
@@ -89,7 +88,7 @@ void JOIN::substitute_base_with_nest_field_items()
   {
     if ((new_item= item->transform(thd,
                                    &Item::replace_with_nest_items, TRUE,
-                                   (uchar *) &arg)) != item)
+                                   (uchar *) this)) != item)
     {
       new_item->name= item->name;
       thd->change_item_tree(it.ref(), new_item);
@@ -103,7 +102,7 @@ void JOIN::substitute_base_with_nest_field_items()
   {
     (*ord->item)= (*ord->item)->transform(thd,
                                           &Item::replace_with_nest_items,
-                                          TRUE, (uchar *) &arg);
+                                          TRUE, (uchar *) this);
     (*ord->item)->update_used_tables();
   }
 
@@ -123,7 +122,7 @@ void JOIN::substitute_base_with_nest_field_items()
     {
       item= (*tab->on_expr_ref)->transform(thd,
                                            &Item::replace_with_nest_items,
-                                           TRUE, (uchar *) &arg);
+                                           TRUE, (uchar *) this);
       *tab->on_expr_ref= item;
       (*tab->on_expr_ref)->update_used_tables();
     }
@@ -141,7 +140,7 @@ void JOIN::substitute_base_with_nest_field_items()
   if (conds)
   {
     conds= conds->transform(thd, &Item::replace_with_nest_items, TRUE,
-                            (uchar *) &arg);
+                            (uchar *) this);
     conds->update_used_tables();
   }
 }
@@ -156,14 +155,13 @@ void JOIN::substitute_base_with_nest_field_items()
 
 void JOIN::substitute_ref_items(JOIN_TAB *tab)
 {
-  REPLACE_NEST_FIELD_ARG arg= {this};
   Item *item;
   /* Substituting REF field items with sort-nest's field items */
   for (uint keypart= 0; keypart < tab->ref.key_parts; keypart++)
   {
     item= tab->ref.items[keypart]->transform(thd,
                                              &Item::replace_with_nest_items,
-                                             TRUE, (uchar *) &arg);
+                                             TRUE, (uchar *) this);
     if (item != tab->ref.items[keypart])
     {
       tab->ref.items[keypart]= item;
@@ -222,9 +220,8 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab)
   if (!sjm->is_sj_scan)
   {
     Item *left_expr= emb_sj_nest->sj_subq_pred->left_expr;
-    REPLACE_NEST_FIELD_ARG arg= {this};
     left_expr= left_expr->transform(thd, &Item::replace_with_nest_items,
-                                    TRUE, (uchar *)&arg);
+                                    TRUE, (uchar *) this);
     left_expr->update_used_tables();
     emb_sj_nest->sj_subq_pred->left_expr= left_expr;
   }
@@ -302,7 +299,7 @@ void JOIN::extract_condition_for_the_nest()
       return;
     extracted_cond->update_used_tables();
     /*
-      Remove from the WHERE clause  the top level conjucts that were
+      Remove from the WHERE clause  the top level conjuncts that were
       extracted for the inner tables of the sort nest
     */
     orig_cond= remove_pushed_top_conjuncts(thd, orig_cond);
@@ -313,36 +310,42 @@ void JOIN::extract_condition_for_the_nest()
 
 
 /*
-  Propgate all the multiple equalites for the order by items,
-  so that one can use them to generate QEP that would
-  also take into consideration equality propagation.
+  @brief
+    Propagate the Multiple Equalities for all the ORDER BY items.
 
-  Example
-    select * from t1,t2 where t1.a=t2.a order by t1.a
+  @details
+    Propagate the multiple equalities for the ORDER BY items.
+    This is needed so that we can generate different join orders
+    that would satisfy ordering after taking equality propagation
+    into consideration.
 
-  So the possible join orders would be:
+    Example
+      SELECT * FROM t1, t2, t3
+      WHERE t1.a = t2.a AND t2.b = t3.a
+      ORDER BY t2.a, t3.a
+      LIMIT 10;
 
-  t1 join t2 then sort
-  t2 join t1 then sort
-  t1 sort(t1) join t2
-  t2 sort(t2) join t1 => this is only possible when equality propagation is
-                         performed
+    Possible join orders which satisfy the ORDER BY clause and
+    which we can get after equality propagation are:
+        - t2, sort(t2), t3, t1          ---> substitute t3.a with t2.b
+        - t2, sort(t2), t1, t3          ---> substitute t3.a with t2.b
+        - t1, t3, sort(t1,t3), t2       ---> substitute t2.a with t1.a
+        - t1, t2, sort(t1,t2), t3       ---> substitute t3.a with t2.b
 
-  @param join           JOIN handler
-  @param sort_order     the ORDER BY clause
+    So with equality propagation for ORDER BY items, we can get more
+    join orders that could satisfy the ORDER BY clause.
 */
 
-void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order)
+void JOIN::propagate_equal_field_for_orderby()
 {
-  if (!join->sort_nest_possible)
+  if (!sort_nest_possible)
     return;
-  ORDER *order;
-  for (order= first_order; order; order= order->next)
+  ORDER *ord;
+  for (ord= order; ord; ord= ord->next)
   {
-    if (optimizer_flag(join->thd, OPTIMIZER_SWITCH_ORDERBY_EQ_PROP) &&
-        join->cond_equal)
+    if (optimizer_flag(thd, OPTIMIZER_SWITCH_ORDERBY_EQ_PROP) && cond_equal)
     {
-      Item *item= order->item[0];
+      Item *item= ord->item[0];
       /*
         TODO: equality substitution in the context of ORDER BY is
         sometimes allowed when it is not allowed in the general case.

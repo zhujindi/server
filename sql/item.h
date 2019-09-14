@@ -451,11 +451,6 @@ typedef struct check_pushdown_field_arg
   bool multi_eq_checked;
 } CHECK_PUSHDOWN_FIELD_ARG;
 
-typedef struct replace_nest_field_arg
-{
-  JOIN *join;
-} REPLACE_NEST_FIELD_ARG;
-
 class Settable_routine_parameter
 {
 public:

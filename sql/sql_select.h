@@ -1839,6 +1839,7 @@ public:
   void substitute_ref_items(JOIN_TAB *tab);
   void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab);
   void extract_condition_for_the_nest();
+  void propagate_equal_field_for_orderby();
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -2185,7 +2186,6 @@ void free_underlaid_joins(THD *thd, SELECT_LEX *select);
 bool mysql_explain_union(THD *thd, SELECT_LEX_UNIT *unit,
                          select_result *result);
 double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
-void propagate_equal_field_for_orderby(JOIN *join, ORDER *first_order);
 bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
                                          table_map previous_tables);
 void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab);

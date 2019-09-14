@@ -5323,7 +5323,7 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
   if (join->sort_nest_allowed() && !join->is_order_by_expensive())
     join->sort_nest_possible= TRUE;
 
-  (void)propagate_equal_field_for_orderby(join, join->order);
+  join->propagate_equal_field_for_orderby();
   /*
     Here a call is made to remove the constant from the order by clause,
     this call would only remove the basic constants. This is done for

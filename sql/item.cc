@@ -6165,7 +6165,7 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
   post ORDER BY context that is when a sort-nest was created
   and the ordering was already done.
 
-  @param arg   NULL or points to so the structure REPLACE_NEST_FIELD_ARG
+  @param arg   NULL or points to the JOIN structure
 
   @note
     This function is supposed to be called as a callback parameter in calls
@@ -6178,8 +6178,7 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
 
 Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
 {
-  REPLACE_NEST_FIELD_ARG* param= (REPLACE_NEST_FIELD_ARG*)arg;
-  JOIN *join= param->join;
+  JOIN *join= (JOIN*)arg;
   SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
   if (!(used_tables() & sort_nest_info->nest_tables_map) &&
       !(used_tables() & OUTER_REF_TABLE_BIT))
