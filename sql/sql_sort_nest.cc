@@ -273,7 +273,6 @@ void JOIN::extract_condition_for_the_nest()
   DBUG_ASSERT(sort_nest_info);
   Item *orig_cond= conds;
   Item *extracted_cond;
-  SELECT_LEX* sl= select_lex;
 
   /*
     check_cond_extraction_for_nest would set NO_EXTRACTION_FL for
@@ -291,7 +290,6 @@ void JOIN::extract_condition_for_the_nest()
     condition that would be added to the tables inside the nest.
     This may clone some items too.
   */
-
   /*
     TODO varun: need to re-factor this too, we need to make this function
     part of the Item class , no need to have it in SELECT LEX
@@ -304,8 +302,8 @@ void JOIN::extract_condition_for_the_nest()
       return;
     extracted_cond->update_used_tables();
     /*
-      Remove from the WHERE clause all the conditions that were added
-      to the inner tables of the sort nest
+      Remove from the WHERE clause  the top level conjucts that were
+      extracted for the inner tables of the sort nest
     */
     orig_cond= remove_pushed_top_conjuncts(thd, orig_cond);
     sort_nest_info->nest_cond= extracted_cond;

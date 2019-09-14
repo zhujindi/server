@@ -9520,7 +9520,7 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
     Item *cond_over_partition_fields;
     cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
                                                     (uchar*)this);
-    cond_over_partition_fields= build_cond_for_grouping_fields(thd, true);
+    cond_over_partition_fields= cond->build_cond_for_grouping_fields(thd, true);
     if (cond_over_partition_fields)
       cond_over_partition_fields= cond_over_partition_fields->transform(thd,
                                 &Item::grouping_field_transformer_for_where,
@@ -9558,7 +9558,7 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
   cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
                                                   (uchar*)this);
 
-  cond_over_grouping_fields= build_cond_for_grouping_fields(thd, true);
+  cond_over_grouping_fields= cond->build_cond_for_grouping_fields(thd, true);
 
   /*
     Transform references to the columns of condition that can be pushed

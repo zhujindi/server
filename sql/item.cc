@@ -7524,18 +7524,18 @@ Item *Item::build_pushable_cond(THD *thd,
 
 Item *Item::build_cond_for_grouping_fields(THD *thd, bool no_top_clones)
 {
-  if (cond->get_extraction_flag() == FULL_EXTRACTION_FL)
+  if (get_extraction_flag() == FULL_EXTRACTION_FL)
   {
     if (no_top_clones)
-      return cond;
-    cond->clear_extraction_flag();
-    return cond->build_clone(thd);
+      return this;
+    clear_extraction_flag();
+    return build_clone(thd);
   }
-  if (cond->type() == Item::COND_ITEM)
+  if (type() == Item::COND_ITEM)
   {
     bool cond_and= false;
     Item_cond *new_cond;
-    if (((Item_cond*) cond)->functype() == Item_func::COND_AND_FUNC)
+    if (((Item_cond*) this)->functype() == Item_func::COND_AND_FUNC)
     {
       cond_and= true;
       new_cond=  new (thd->mem_root) Item_cond_and(thd);
@@ -7544,7 +7544,7 @@ Item *Item::build_cond_for_grouping_fields(THD *thd, bool no_top_clones)
       new_cond= new (thd->mem_root) Item_cond_or(thd);
     if (unlikely(!new_cond))
       return 0;
-    List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
+    List_iterator<Item> li(*((Item_cond*) this)->argument_list());
     Item *item;
     while ((item=li++))
     {
