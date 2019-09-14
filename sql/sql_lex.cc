@@ -7921,100 +7921,6 @@ bool st_select_lex::collect_grouping_fields(THD *thd)
   return true;
 }
 
-/**
-  @brief
-  Build condition extractable from the given one depended on grouping fields
- 
-  @param thd           The thread handle
-  @param cond          The condition from which the condition depended 
-                       on grouping fields is to be extracted
-  @param no_top_clones If it's true then no clones for the top fully 
-                       extractable conjuncts are built
-
-  @details
-    For the given condition cond this method finds out what condition depended
-    only on the grouping fields can be extracted from cond. If such condition C
-    exists the method builds the item for it.
-    This method uses the flags NO_EXTRACTION_FL and FULL_EXTRACTION_FL set by the
-    preliminary call of st_select_lex::check_cond_extraction_for_grouping_fields
-    to figure out whether a subformula depends only on these fields or not.
-  @note
-    The built condition C is always implied by the condition cond
-    (cond => C). The method tries to build the least restictive such
-    condition (i.e. for any other condition C' such that cond => C'
-    we have C => C').
-  @note
-    The build item is not ready for usage: substitution for the field items
-    has to be done and it has to be re-fixed.
-  
-  @retval
-    the built condition depended only on grouping fields if such a condition exists
-    NULL if there is no such a condition
-*/ 
-
-Item *st_select_lex::build_cond_for_grouping_fields(THD *thd, Item *cond,
-                                                    bool no_top_clones)
-{
-  if (cond->get_extraction_flag() == FULL_EXTRACTION_FL)
-  {
-    if (no_top_clones)
-      return cond;
-    cond->clear_extraction_flag();
-    return cond->build_clone(thd);
-  }
-  if (cond->type() == Item::COND_ITEM)
-  {
-    bool cond_and= false;
-    Item_cond *new_cond;
-    if (((Item_cond*) cond)->functype() == Item_func::COND_AND_FUNC)
-    {
-      cond_and= true;
-      new_cond=  new (thd->mem_root) Item_cond_and(thd);
-    }
-    else
-      new_cond= new (thd->mem_root) Item_cond_or(thd);
-    if (unlikely(!new_cond))
-      return 0;
-    List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
-    Item *item;
-    while ((item=li++))
-    {
-      if (item->get_extraction_flag() == NO_EXTRACTION_FL)
-      {
-        DBUG_ASSERT(cond_and);
-        item->clear_extraction_flag();
-        continue;
-      }
-      Item *fix= build_cond_for_grouping_fields(thd, item,
-                                                no_top_clones & cond_and);
-      if (unlikely(!fix))
-      {
-        if (cond_and)
-          continue;
-        break;
-      }
-      new_cond->argument_list()->push_back(fix, thd->mem_root);
-    }
-    
-    if (!cond_and && item)
-    {
-      while((item= li++))
-        item->clear_extraction_flag();
-      return 0;
-    }
-    switch (new_cond->argument_list()->elements) 
-    {
-    case 0:
-      return 0;
-    case 1:
-      return new_cond->argument_list()->head();
-    default:
-      return new_cond;
-    }
-  }
-  return 0;
-}
-
 
 bool st_select_lex::set_nest_level(int new_nest_level)
 {
@@ -9614,8 +9520,7 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
     Item *cond_over_partition_fields;
     cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
                                                     (uchar*)this);
-    cond_over_partition_fields=
-      build_cond_for_grouping_fields(thd, cond, true);
+    cond_over_partition_fields= build_cond_for_grouping_fields(thd, true);
     if (cond_over_partition_fields)
       cond_over_partition_fields= cond_over_partition_fields->transform(thd,
                                 &Item::grouping_field_transformer_for_where,
@@ -9652,8 +9557,8 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
   Item *cond_over_grouping_fields;
   cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
                                                   (uchar*)this);
-  cond_over_grouping_fields=
-    build_cond_for_grouping_fields(thd, cond, true);
+
+  cond_over_grouping_fields= build_cond_for_grouping_fields(thd, true);
 
   /*
     Transform references to the columns of condition that can be pushed

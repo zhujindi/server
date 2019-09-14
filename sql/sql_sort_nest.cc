@@ -296,7 +296,7 @@ void JOIN::extract_condition_for_the_nest()
     TODO varun: need to re-factor this too, we need to make this function
     part of the Item class , no need to have it in SELECT LEX
   */
-  extracted_cond= sl->build_cond_for_grouping_fields(thd, orig_cond, TRUE);
+  extracted_cond= orig_cond->build_cond_for_grouping_fields(thd, TRUE);
 
   if (extracted_cond)
   {

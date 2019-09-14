@@ -2357,6 +2357,7 @@ public:
   Item *build_pushable_cond(THD *thd,
                             Pushdown_checker checker,
                             uchar *arg);
+  Item *build_cond_for_grouping_fields(THD *thd, bool no_top_clones);
   /*
     Checks if this item depends only on the arg table
   */
