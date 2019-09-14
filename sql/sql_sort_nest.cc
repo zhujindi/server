@@ -770,10 +770,18 @@ bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used)
 
 /*
   @brief
-  Check if an index(used for index scan or range scan) can achieve the
-  ordering for the first non-const table, if yes calculate the cost and
-  check if we get a better cost than previous access chosen
+    Check if an index that achieves ordering on the first non-const table
+    is cheaper than the best access found.
 
+  @param
+    tab                       joined table
+    read_time [out]           cost for the best index picked
+    records   [out]           estimate of records going to be accessed by the
+                              index
+    cardinality               estimate of records in the join output
+    index_used                >=0 number of index used for best access
+                              -1  no index used for best access
+    idx                       position of the joined table in the partial plan
   @retval
     -1  no cheaper index found for ordering
     >=0 cheaper index found for ordering
@@ -785,37 +793,35 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
 {
   TABLE *table= tab->table;
   JOIN *join= tab->join;
-  THD *thd= join->thd;
   double save_read_time= *read_time;
   double save_records= *records;
+
   /**
     Cases when there is no need to consider the indexes that achieve the
     ordering
 
     1) If there is no limit
-    2) If there is no order by clause
-    3) Check index for ordering only for the first non-const table
-    4) Cardinality is DBL_MAX, then we don't need to consider the index,
+    2) Check index for ordering only for the first non-const table
+    3) Cardinality is DBL_MAX, then we don't need to consider the index,
        it is sent to DBL_MAX for semi-join strategies
-    5) Force index is used
-    6) Sort nest is possible and it is not disabled(done when we want to
-       get the cardinality)
+    4) Force index is used
+    5) Sort nest is possible is not possible (would also cover the case
+                                              if ORDER BY clause is present
+                                              or not)
+    6) join planner is run to get estimate of cardinality
     7) If there is no index that achieves the ordering
-    8) Already an access method is picked that satisfies the ordering
-
-    Do we need to consider non-covering keys that have no range access?
-    Currently all indexes that satisfy the ordering are considered
   */
-  if (join->select_limit == HA_POS_ERROR ||
-      !join->order ||
-      idx ||
-      cardinality == DBL_MAX ||
-      table->force_index ||
-      !join->sort_nest_possible ||
-      join->get_cardinality_estimate ||
-      table->keys_in_use_for_order_by.is_clear_all())
+
+  if (join->select_limit == HA_POS_ERROR ||                    // (1)
+      idx ||                                                   // (2)
+      cardinality == DBL_MAX ||                                // (3)
+      table->force_index ||                                    // (4)
+      !join->sort_nest_possible ||                             // (5)
+      join->get_cardinality_estimate ||                        // (6)
+      table->keys_in_use_for_order_by.is_clear_all())          // (7)
     return -1;
 
+  THD *thd= join->thd;
   Json_writer_object trace_index_for_ordering(thd);
   double est_records= *records;
   double fanout= cardinality / est_records;
@@ -871,8 +877,9 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
   trace_index_for_ordering.add("best_cost", *read_time);
 
   /*
-    If an index already found satisfied the ordering and we picked index
-    scan then revert the cost and stick with the access picked first.
+    If an index already found satisfied the ordering and we picked an index
+    for which we choose to do index scan then revert the cost and stick
+    with the access picked first.
     Index scan would not help in comparison with ref access.
   */
   if (index_satisfies_ordering(tab, index_used))
