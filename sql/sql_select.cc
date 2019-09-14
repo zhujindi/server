@@ -5391,7 +5391,7 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
         all select distinct fields participate in one index.
       */
       add_group_and_distinct_keys(join, s);
-      find_keys_that_can_achieve_ordering(join, s);
+      join->find_keys_that_can_achieve_ordering(s->table);
       s->get_estimated_record_length();
 
       s->table->cond_selectivity= 1.0;

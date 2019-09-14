@@ -412,8 +412,8 @@ bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
 
     Also this function computes a table map for tables that allow
     join buffering. When a sort-nest is found tables following
-    the sort-nest cannout use join buffering, as join buffering
-    does not ensure that ordering will be mainitained.
+    the sort-nest cannot use join buffering, as join buffering
+    does not ensure that ordering will be maintained.
 
   @retval
     TRUE  sort-nest present
@@ -460,10 +460,12 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables)
 
 /*
   @brief
-    Create a sort nest info structure, that would store all the details
-    about the sort-nest.
+    Create a sort nest info structure
 
   @param n_tables         number of tables inside the sort-nest
+
+  @details
+    This sort-nest structure would hold all the information about the sort-nest.
 
   @retval
     FALSE     successful in creating the sort-nest info structure
@@ -488,7 +490,8 @@ bool JOIN::create_sort_nest_info(uint n_tables)
 
   @details
     Setup execution structures for sort-nest materialization:
-      - Create the list of Items that are needed by the sort-nest
+      - Create the list of Items of the inner tables of the sort-nest
+        that are needed for the post ORDER BY computations
       - Create the materialization temporary table for the sort-nest
 
     This function fills up the SORT_NEST_INFO structure
@@ -627,25 +630,21 @@ bool JOIN::make_sort_nest()
 
 
 /*
-  Calculate the cost of adding a sort-nest to the join.
-
-  SYNOPSIS
-
-  sort_nest_oper_cost()
-    @param join          the join handler
+  @bried
+    Calculate the cost of adding a sort-nest.
 
   @param
     join                the join handler
-    join_record_count   the cardinalty of the partial join
+    join_record_count   the cardinality of the partial join
     rec_len             length of the record in the sort-nest table
+    idx                 position of the joined table in the partial plan
 
-  DESCRIPTION
+  @details
     The calculation for the cost of the sort-nest is done here, the cost
     included three components
       - Filling the sort-nest table
       - Sorting the sort-nest table
       - Reading from the sort-nest table
-
 */
 
 double sort_nest_oper_cost(JOIN *join, double join_record_count,
@@ -661,14 +660,19 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
   */
   if (idx != join->const_tables)
     cost=  get_tmp_table_write_cost(thd, join_record_count,rec_len) *
-           join_record_count;   // cost to fill tmp table
+           join_record_count; // cost to fill temp table
 
+  /*
+    TODO varun:
+    should we apply the limit here as we would read only
+    join_record_count * selectivity_of_limit records
+  */
   cost+= get_tmp_table_lookup_cost(thd, join_record_count,rec_len) *
          join_record_count;   // cost to perform post join operation used here
   cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) +
          (join_record_count == 0 ? 0 :
           join_record_count * log2 (join_record_count)) *
-         SORT_INDEX_CMP_COST;             // cost to perform  sorting
+         SORT_INDEX_CMP_COST; // cost to perform  sorting
   return cost;
 }
 
@@ -711,34 +715,45 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
 
 /*
   @brief
-  Find all keys for the table inside join_tab that would satisfy
-  the ORDER BY clause
+    Find all indexes for a table that would satisfy the ORDER BY clause
+
+  @param
+    join                         join handler
+    table                        table structure
+
+  @details
+    This function sets the flag TABLE::keys_in_use_for_order_by
+    with all the index that satisfy the ORDER BY clause.
 */
 
-void find_keys_that_can_achieve_ordering(JOIN *join, JOIN_TAB *tab)
+void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
 {
-  if (!join->sort_nest_possible)
+  if (!sort_nest_possible)
     return;
-  TABLE* table= tab->table;
   key_map keys_with_ordering;
   keys_with_ordering.clear_all();
   for (uint index= 0; index < table->s->keys; index++)
   {
     if (table->keys_in_use_for_query.is_set(index) &&
-        test_if_order_by_key(join, join->order, table, index))
+        test_if_order_by_key(this, order, table, index))
       keys_with_ordering.set_bit(index);
   }
   table->keys_in_use_for_order_by.intersect(keys_with_ordering);
 }
 
+
 /*
   @brief
-  Checks if the partial plan needs filesort for ordering or an index
-  picked by best_access_path achieves the ordering
+    Checks if the partial plan needs Filesort for ordering.
 
+  @param
+    tab          joined table
+    idx          position of the joined table in the partial plan
+    index_used   >=0 number of the index that satisfies the ORDER BY clause
+                 -1  no index chosen that satisfies the ORDER BY clause
   @retval
-    TRUE  : Filesort is needed
-    FALSE : index access satifies the ordering
+    TRUE   Filesort is needed
+    FALSE  index present that satisfies the ordering
 */
 
 bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used)
@@ -858,7 +873,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
   /*
     If an index already found satisfied the ordering and we picked index
     scan then revert the cost and stick with the access picked first.
-    Index scan would not help in comparision with ref access.
+    Index scan would not help in comparison with ref access.
   */
   if (index_satisfies_ordering(tab, index_used))
   {
@@ -875,8 +890,12 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
 
 /*
   @brief
-   Disable join buffering for all the tables that come after the inner
-   table of the sort-nest. This is done because join-buffering does not
+   Disable join buffering for all the tables at the top level that come after
+   sorting has been performed.
+
+  @param
+  that come after the inner
+  table of the sort-nest. This is done because join-buffering does not
    ensure ordering.
 */
 

@@ -3902,7 +3902,10 @@ bool setup_sj_materialization_part1(JOIN_TAB *sjm_tab)
 
   DBUG_ENTER("setup_sj_materialization");
   
-  /* Walk out of outer join nests until we reach the semi-join nest we're in */
+  /*
+    Walk out of outer join nests until we reach the semi-join nest we're in
+    TODO varun: add a comment
+  */
   while (!emb_sj_nest->sj_mat_info)
     emb_sj_nest= emb_sj_nest->embedding;
 
