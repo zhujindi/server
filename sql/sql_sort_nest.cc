@@ -1091,8 +1091,7 @@ int JOIN_TAB::get_index_on_table()
   else if (type == JT_NEXT)
     idx= index;
   else if (type == JT_ALL && select && select->quick)
-    idx= tab->select->quick->index;
-
+    idx= select->quick->index;
   return idx;
 }
 
