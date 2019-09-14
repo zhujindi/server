@@ -2916,9 +2916,9 @@ int JOIN::optimize_stage2()
       else
       {
         JOIN_TAB *first_tab= sort_nest_info->nest_tab;
-        int idx= get_index_on_table(first_tab);
+        int idx= first_tab->get_index_on_table();
 
-        if (index_satisfies_ordering(first_tab, idx))
+        if (check_if_index_satisfies_ordering(first_tab->table, idx))
         {
           resetup_access_for_ordering(first_tab, idx);
           ordered_index_usage= ordered_index_order_by;
@@ -9577,11 +9577,12 @@ best_extension_by_limited_search(JOIN      *join,
       /*
         sort_nest_operation_here is set to TRUE here in the special case
         when we only have one table in the join. Generally
-        sort_nest_operation_here is set when we check if ordering is achieved
-        in the sort-nest branch of best_extension_by_limited_search.
+        sort_nest_operation_here is set when we check if ORDER BY clause is
+        satisfied by the partial join order, in the sort-nest branch of
+        best_extension_by_limited_search.
       */
       if (!idx && join->sort_nest_possible && !join->get_cardinality_estimate &&
-          index_satisfies_ordering(s, index_used))
+          check_if_index_satisfies_ordering(s->table, index_used))
       {
         if (s->table->force_index)
         {
@@ -9684,7 +9685,7 @@ best_extension_by_limited_search(JOIN      *join,
                           join->cur_embedding_map == 0);
         if (!idx && join->sort_nest_possible &&
             !join->get_cardinality_estimate &&
-            index_satisfies_ordering(s, index_used))
+            check_if_index_satisfies_ordering(s->table, index_used))
           limit_applied_to_nest= TRUE;
 
         /*
@@ -10520,7 +10521,7 @@ bool JOIN::get_best_combination()
     if (sort_nest_needed())
       join_tab[const_tables + sort_nest_info->n_tables].is_sort_nest= TRUE;
     else
-      setup_index_use_for_ordering(this, index_no);
+      setup_index_use_for_ordering(index_no);
   }
 
   JOIN_TAB_RANGE *root_range;
@@ -29154,9 +29155,16 @@ bool JOIN::is_order_by_expensive()
 
 /*
   @brief
-  reset the way to access index in the case when we have ordering in DESC
-  Also cancel the Index Condition Pushdown for the indexes that need to
-  do the ordering in reverse order
+    Re-setup accesses that use index on the first non-const table for ordering
+
+  @param
+    tab                         table whose access needs to be re-setup
+    idx                         index used to access first non-const table
+
+  @details
+    Re-setup the way to access index when the ordering is in DESCENDING order.
+    Also cancel the Index Condition Pushdown for the indexes that need to
+    do the ordering in reverse order.
 */
 
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx)

@@ -689,6 +689,7 @@ typedef struct st_join_table {
                                         table_map remaining_tables);
   bool fix_splitting(SplM_plan_info *spl_plan, table_map remaining_tables,
                      bool is_const_table);
+  int get_index_on_table();
 } JOIN_TAB;
 
 
@@ -1841,6 +1842,8 @@ public:
   void extract_condition_for_the_nest();
   void propagate_equal_field_for_orderby();
   void find_keys_that_can_achieve_ordering(TABLE *table);
+  void setup_index_use_for_ordering(int index_no);
+  void setup_range_scan(JOIN_TAB *tab, uint idx, double records);
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -2198,10 +2201,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
                                       double *records, double cardinality,
                                       int index_used, uint idx);
 bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab);
-bool index_satisfies_ordering(JOIN_TAB *tab, int index_used);
-bool setup_range_scan(JOIN *join, JOIN_TAB *tab, uint idx, double records);
-void setup_index_use_for_ordering(JOIN *join, int index_no);
-int get_index_on_table(JOIN_TAB *tab);
+bool check_if_index_satisfies_ordering(TABLE *table, int index_used);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
 void set_fraction_output_for_nest(JOIN *join, double *cardinality);
 

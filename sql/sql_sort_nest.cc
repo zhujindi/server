@@ -882,7 +882,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
     with the access picked first.
     Index scan would not help in comparison with ref access.
   */
-  if (index_satisfies_ordering(tab, index_used))
+  if (check_if_index_satisfies_ordering(tab->table, index_used))
   {
     if (!table->quick_keys.is_set(static_cast<uint>(index_used)))
     {
@@ -899,11 +899,6 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
   @brief
    Disable join buffering for all the tables at the top level that come after
    sorting has been performed.
-
-  @param
-  that come after the inner
-  table of the sort-nest. This is done because join-buffering does not
-   ensure ordering.
 */
 
 bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab)
@@ -921,18 +916,24 @@ bool check_if_join_buffering_needed(JOIN *join, JOIN_TAB *tab)
 
 /*
   @brief
-  Check if an index satisfies the ORDER BY clause or not
+    Check if an index on the first non-const table satisfies the ORDER BY
+    clause or not.
+
+  @param
+    table                       First non-const table
+    index_used                  index to be checked
 
   @retval
-    TRUE index satisfies the ordering
-    FALSE index does not satisfy the ordering
+    TRUE  index satisfies the ORDER BY clause
+    FALSE otherwise
 */
 
-bool index_satisfies_ordering(JOIN_TAB *tab, int index_used)
+bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
 {
-  TABLE *table= tab->table;
-  if (index_used >=0 && index_used < MAX_KEY &&
-      !table->keys_in_use_for_order_by.is_clear_all())
+  if (!(index_used >=0 && index_used < MAX_KEY))
+    return FALSE;
+
+  if (!table->keys_in_use_for_order_by.is_clear_all())
   {
     if (table->keys_in_use_for_order_by.is_set(static_cast<uint>(index_used)))
       return TRUE;
@@ -941,119 +942,155 @@ bool index_satisfies_ordering(JOIN_TAB *tab, int index_used)
 }
 
 
-bool setup_range_scan(JOIN *join, JOIN_TAB *tab, uint idx, double records)
+/*
+  @brief
+    Set up range scan for the table.
+
+  @param
+    tab                    table for which range scan needs to be setup
+    idx                    index for which range scan needs to created
+    records                estimate of records to be read with range scan
+
+  @details
+    Range scan is setup here for an index that satisfies the ORDER BY clause.
+
+  @note
+    This is done for the ORDER BY LIMIT optimization. We try to force creation
+    of range scan for the index the join planner picked for us. Also here
+    we reverse the range scan if the ordering is in reverse direction.
+*/
+
+void JOIN::setup_range_scan(JOIN_TAB *tab, uint idx, double records)
 {
-    SQL_SELECT *sel= NULL;
-    Item **sargable_cond= get_sargable_cond(join, tab->table);
-    int err, rc, direction;
-    uint used_key_parts;
-    key_map keymap_for_range;
-    THD *thd= join->thd;
-    Json_writer_array forcing_range(thd, "range_scan_for_order_by_limit");
+  SQL_SELECT *sel= NULL;
+  Item **sargable_cond= get_sargable_cond(this, tab->table);
+  int err, rc, direction;
+  uint used_key_parts;
+  key_map keymap_for_range;
+  Json_writer_array forcing_range(thd, "range_scan_for_order_by_limit");
 
-    /*
-      TODO(varun)
-      Find a workaround for this, alreay created a QUICK object, can't
-      we just use the same object even if the reversing is required.
-    */
-    if (tab->quick)
-    {
-      delete tab->quick;
-      tab->quick= 0;
-    }
+  sel= make_select(tab->table, const_table_map, const_table_map,
+                   *sargable_cond, (SORT_INFO*) 0, 1, &err);
+  if (!sel)
+    goto use_filesort;
 
-    sel= make_select(tab->table, join->const_table_map,
-                     join->const_table_map,
-                     *sargable_cond, (SORT_INFO*) 0, 1, &err);
-    if (!sel)
-      goto use_filesort;
+  /*
+    If the table already had a range access, check if it is the same as the
+    one we wanted to create range scan for, if yes don't run the range
+    optimizer again.
+  */
 
-
+  if (!(tab->quick && tab->quick->index == idx))
+  {
     keymap_for_range.clear_all();  // Force the creation of quick select
-    keymap_for_range.set_bit(idx); // only for new_ref_key.
+    keymap_for_range.set_bit(idx); // only for index using range access.
 
-    rc= sel->test_quick_select(join->thd, keymap_for_range,
+    rc= sel->test_quick_select(thd, keymap_for_range,
                                (table_map) 0,
                                (ha_rows) HA_POS_ERROR,
                                true, false, true, true);
     if (rc <= 0)
       goto use_filesort;
+  }
+  else
+    sel->quick= tab->quick;
 
-    direction= test_if_order_by_key(join, join->order, tab->table, idx,
-                                    &used_key_parts);
-    if (direction == -1)
-    {
-      QUICK_SELECT_I *reverse_quick;
-      if (sel && sel->quick)
-      {
-        reverse_quick= sel->quick->make_reverse(used_key_parts);
-        sel->set_quick(reverse_quick);
-      }
-    }
-    tab->quick= sel->quick;
+  direction= test_if_order_by_key(this, order, tab->table, idx,
+                                  &used_key_parts);
+
+  if (direction == -1)
+  {
     /*
-      Fix for explain, the records here should be set to the value
-      which was stored in the POSITION object as the fraction which we
-      would read would have been applied.
+      QUICK structure is reversed here as the ordering is in DESC order
     */
-    if (records < tab->quick->records)
-      tab->quick->records= records;
-    sel->quick= 0;
+    QUICK_SELECT_I *reverse_quick;
+    if (sel && sel->quick)
+    {
+      reverse_quick= sel->quick->make_reverse(used_key_parts);
+      if (!reverse_quick)
+        goto use_filesort;
+      sel->set_quick(reverse_quick);
+    }
+  }
 
-  use_filesort:
-    delete sel;
-  return rc <=0 ? FALSE : TRUE;
+  tab->quick= sel->quick;
 
+  /*
+    Fix for explain, the records here should be set to the value
+    which was stored in the JOIN::best_positions object. This is needed
+    because we had made a new estimate of records read taking limit into
+    account.
+  */
+  if (sort_nest_possible && records < tab->quick->records)
+    tab->quick->records= records;
+
+  sel->quick= NULL;
+
+use_filesort:
+  delete sel;
 }
 
 
 /*
   @brief
-    Setup range or index scan for the ordering
+    Setup range or index scan for ordering
+
+  @param
+    index_no        index for which index scan or range scan needs to be setup
 */
 
-void setup_index_use_for_ordering(JOIN *join, int index_no)
+void JOIN::setup_index_use_for_ordering(int index_no)
 {
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  sort_nest_info->nest_tab= join->join_tab + join->const_tables;
-  POSITION *cur_pos= &join->best_positions[join->const_tables];
+  DBUG_ASSERT(sort_nest_info->index_used == -1);
+
+  sort_nest_info->nest_tab= join_tab + const_tables;
+  POSITION *cur_pos= &best_positions[const_tables];
+  JOIN_TAB *tab= cur_pos->table;
+
   index_no= (index_no == -1) ?
             (cur_pos->table->quick ? cur_pos->table->quick->index : -1) :
             index_no;
-  if (index_satisfies_ordering(cur_pos->table, index_no))
+
+  if (check_if_index_satisfies_ordering(tab->table, index_no))
   {
-    if (cur_pos->table->table->quick_keys.is_set(index_no))
+    if (tab->table->quick_keys.is_set(index_no))
     {
       // Range scan
-      (void)setup_range_scan(join, cur_pos->table, index_no,
-                             cur_pos->records_read);
+      setup_range_scan(tab, index_no, cur_pos->records_read);
       sort_nest_info->index_used= -1;
     }
     else
     {
-      if (cur_pos->table->quick)
+       // Index scan
+      if (tab->quick)
       {
-        delete cur_pos->table->quick;
-        cur_pos->table->quick= 0;
+        delete tab->quick;
+        tab->quick= NULL;
       }
-      sort_nest_info->index_used= index_no; // Index scan
+      sort_nest_info->index_used= index_no;
     }
   }
-  else
-    sort_nest_info->index_used= -1;
 }
 
 
-int get_index_on_table(JOIN_TAB *tab)
+/*
+  @brief
+    Get index used to access the table, if present
+
+  @retval
+    >=0 index used to access the table
+    -1  no index used to access table, probably table scan is done
+*/
+
+int JOIN_TAB::get_index_on_table()
 {
   int idx= -1;
-  if (tab->type == JT_REF  || tab->type == JT_EQ_REF ||
-      tab->type == JT_REF_OR_NULL)
-    idx= tab->ref.key;
-  else if (tab->type == JT_NEXT)
-    idx= tab->index;
-  else if (tab->type == JT_ALL &&
-           tab->select && tab->select->quick)
+
+  if (type == JT_REF  || type == JT_EQ_REF || type == JT_REF_OR_NULL)
+    idx= ref.key;
+  else if (type == JT_NEXT)
+    idx= index;
+  else if (type == JT_ALL && select && select->quick)
     idx= tab->select->quick->index;
 
   return idx;

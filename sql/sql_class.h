@@ -6079,8 +6079,8 @@ public:
   table_map nest_tables_map;
   Item *nest_cond;
   /*
-    set to the index number for the index that does the index scan on the
-    first non-const table and satisfies the ORDER BY clause.
+    >=0 set to the index that satisfies the ORDER BY clause and does an index
+        scan on the first non-const table.
     -1 otherwise
   */
   int index_used;
