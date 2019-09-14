@@ -2331,11 +2331,25 @@ public:
     marker &= ~EXTRACTION_MASK;
   }
   void check_pushable_cond(Pushdown_checker excl_dep_func, uchar *arg);
+
+  /*
+    TODO varun: change the name here, please think something that would be
+    generalised for both the sort-nest condition extraction and grouping fields
+  */
+  void check_cond_extraction_for_grouping_fields(Pushdown_checker checker,
+                                                 uchar *arg);
+
   bool pushable_cond_checker_for_tables(uchar *arg)
   {
     CHECK_PUSHDOWN_FIELD_ARG *param= (CHECK_PUSHDOWN_FIELD_ARG*)arg;
     return excl_dep_on_tables(param->tables_map, param->multi_eq_checked);
   }
+
+  bool pushable_cond_checker_for_grouping_fields(uchar *arg)
+  {
+    return excl_dep_on_grouping_fields((st_select_lex*)arg);
+  }
+
   bool pushable_cond_checker_for_subquery(uchar *arg)
   {
     return excl_dep_on_in_subq_left_part((Item_in_subselect *)arg);

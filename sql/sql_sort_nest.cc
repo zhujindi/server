@@ -283,9 +283,9 @@ void JOIN::extract_condition_for_the_nest()
       -change name of pushable_cond_checker_for_derived
   */
   CHECK_PUSHDOWN_FIELD_ARG arg= {sort_nest_info->nest_tables_map, TRUE};
-  check_cond_extraction_for_nest(thd, orig_cond,
-                                 &Item::pushable_cond_checker_for_tables,
-                                 (uchar *)&arg);
+
+  orig_cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_tables,
+                                                       (uchar*)&arg);
   /*
     build_cond_for_grouping_fields would create the entire
     condition that would be added to the tables inside the nest.
@@ -311,86 +311,6 @@ void JOIN::extract_condition_for_the_nest()
     sort_nest_info->nest_cond= extracted_cond;
   }
   conds= orig_cond;
-}
-
-
-/**
-  @brief
-   For a condition check possibility of exraction a formula over sort-nest
-   base table items
-
-  @param thd      The thread handle
-  @param cond     The condition whose subformulas are to be analyzed
-  @param checker  The checker callback function to be applied to the nodes
-                  of the tree of the object
-
-  @details
-    This method traverses the AND-OR condition cond and for each subformula of
-    the condition it checks whether it can be usable for the extraction of a
-    condition over the sort_nest base tables.
-    The method uses the call-back parameter checker to check whether a
-    primary formula depends only on the sort-nest tables or not.
-    The subformulas that are not usable are marked with the
-    flag NO_EXTRACTION_FL.
-    The subformulas that can be entierly extracted are marked with the flag
-    FULL_EXTRACTION_FL.
-
-  @note
-    The flag NO_EXTRACTION_FL set in a subformula allows to avoid
-    building clone for the subformula which cannot be extracted.
-    The flag FULL_EXTRACTION_FL allows to delete later all top level conjuncts
-    from cond.
-*/
-
-void
-check_cond_extraction_for_nest(THD *thd, Item *cond,
-                               Pushdown_checker checker, uchar* arg)
-{
-  if (cond->get_extraction_flag() == NO_EXTRACTION_FL)
-    return;
-  cond->clear_extraction_flag();
-  if (cond->type() == Item::COND_ITEM)
-  {
-    Item_cond_and *and_cond=
-      (((Item_cond*) cond)->functype() == Item_func::COND_AND_FUNC) ?
-      ((Item_cond_and*) cond) : 0;
-
-    List<Item> *arg_list=  ((Item_cond*) cond)->argument_list();
-    List_iterator<Item> li(*arg_list);
-    uint count= 0;         // to count items not containing NO_EXTRACTION_FL
-    uint count_full= 0;    // to count items with FULL_EXTRACTION_FL
-    Item *item;
-    while ((item=li++))
-    {
-      check_cond_extraction_for_nest(thd, item, checker, arg);
-      if (item->get_extraction_flag() !=  NO_EXTRACTION_FL)
-      {
-        count++;
-        if (item->get_extraction_flag() == FULL_EXTRACTION_FL)
-          count_full++;
-      }
-      else if (!and_cond)
-        break;
-    }
-    if ((and_cond && count == 0) || item)
-      cond->set_extraction_flag(NO_EXTRACTION_FL);
-    if (count_full == arg_list->elements)
-    {
-      cond->set_extraction_flag(FULL_EXTRACTION_FL);
-    }
-    if (cond->get_extraction_flag() != 0)
-    {
-      li.rewind();
-      while ((item=li++))
-        item->clear_extraction_flag();
-    }
-  }
-  else
-  {
-    int fl= (cond->*checker)(arg) ?
-      FULL_EXTRACTION_FL : NO_EXTRACTION_FL;
-    cond->set_extraction_flag(fl);
-  }
 }
 
 
