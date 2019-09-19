@@ -2331,8 +2331,7 @@ public:
     TODO varun: change the name here, please think something that would be
     generalised for both the sort-nest condition extraction and grouping fields
   */
-  void check_cond_extraction_for_grouping_fields(Pushdown_checker checker,
-                                                 uchar *arg);
+  void check_pushable_cond_extraction(Pushdown_checker checker, uchar *arg);
 
   bool pushable_cond_checker_for_tables(uchar *arg)
   {
@@ -2352,7 +2351,7 @@ public:
   Item *build_pushable_cond(THD *thd,
                             Pushdown_checker checker,
                             uchar *arg);
-  Item *build_cond_for_grouping_fields(THD *thd, bool no_top_clones);
+  Item *build_pushable_condition(THD *thd, bool no_top_clones);
   /*
     Checks if this item depends only on the arg table
   */

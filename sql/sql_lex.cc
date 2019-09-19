@@ -9518,9 +9518,9 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
   if (have_window_funcs())
   {
     Item *cond_over_partition_fields;
-    cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
-                                                    (uchar*)this);
-    cond_over_partition_fields= cond->build_cond_for_grouping_fields(thd, true);
+    cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_grouping_fields,
+                                         (uchar*)this);
+    cond_over_partition_fields= cond->build_pushable_condition(thd, true);
     if (cond_over_partition_fields)
       cond_over_partition_fields= cond_over_partition_fields->transform(thd,
                                 &Item::grouping_field_transformer_for_where,
@@ -9555,10 +9555,10 @@ void st_select_lex::pushdown_cond_into_where_clause(THD *thd, Item *cond,
     the WHERE clause of this select.
   */
   Item *cond_over_grouping_fields;
-  cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
-                                                  (uchar*)this);
+  cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_grouping_fields,
+                                       (uchar*)this);
 
-  cond_over_grouping_fields= cond->build_cond_for_grouping_fields(thd, true);
+  cond_over_grouping_fields= cond->build_pushable_condition(thd, true);
 
   /*
     Transform references to the columns of condition that can be pushed
@@ -10050,8 +10050,8 @@ Item *st_select_lex::pushdown_from_having_into_where(THD *thd, Item *having)
   */
   List_iterator_fast<Item> it(attach_to_conds);
   Item *item;
-  having->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_grouping_fields,
-                                                    (uchar*)this);
+  having->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_grouping_fields,
+                                         (uchar*)this);
   if (build_pushable_cond_for_having_pushdown(thd, having))
   {
     attach_to_conds.empty();

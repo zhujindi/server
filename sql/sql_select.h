@@ -1566,6 +1566,13 @@ public:
   */
   double fraction_output_for_nest;
 
+  /*
+    Caches that a prefix resolved the ORDER BY clause. This is done so that
+    we don't walk through the order by list everytime when we extend the prefix
+    to check if the extended prefix satifies the ordering or not.
+  */
+  bool prefix_resolves_ordering;
+
   JOIN(THD *thd_arg, List<Item> &fields_arg, ulonglong select_options_arg,
        select_result *result_arg)
     :fields_list(fields_arg)
@@ -1664,6 +1671,7 @@ public:
     sort_nest_info= NULL;
     sort_nest_possible= FALSE;
     fraction_output_for_nest= 1;
+    prefix_resolves_ordering= FALSE;
   }
 
   /* True if the plan guarantees that it will be returned zero or one row */
@@ -1845,6 +1853,14 @@ public:
   void setup_index_use_for_ordering(int index_no);
   void setup_range_scan(JOIN_TAB *tab, uint idx, double records);
   bool is_join_buffering_allowed(JOIN_TAB *tab);
+  bool check_join_prefix_resolves_ordering(table_map previous_tables);
+  bool consider_adding_sort_nest(table_map previous_tables);
+  bool needs_filesort(TABLE *table, uint idx, int index_used);
+  void set_fraction_output_for_nest(double *cardinality);
+  double sort_nest_oper_cost(double join_record_count, uint idx,
+                             ulong rec_len);
+  bool is_index_with_ordering_allowed(TABLE *table, uint idx, int index_used);
+
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
                                    table_map filter_map,
@@ -2191,11 +2207,6 @@ void free_underlaid_joins(THD *thd, SELECT_LEX *select);
 bool mysql_explain_union(THD *thd, SELECT_LEX_UNIT *unit,
                          select_result *result);
 double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
-bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
-                                         table_map previous_tables);
-double sort_nest_oper_cost(JOIN *join, double join_record_count,
-                           ulong rec_len, uint idx);
-bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used);
 void check_cond_extraction_for_nest(THD *thd, Item *cond,
                                     Pushdown_checker checker, uchar* arg);
 int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
@@ -2203,7 +2214,6 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
                                       int index_used, uint idx);
 bool check_if_index_satisfies_ordering(TABLE *table, int index_used);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
-void set_fraction_output_for_nest(JOIN *join, double *cardinality);
 
 /*
   General routine to change field->ptr of a NULL-terminated array of Field

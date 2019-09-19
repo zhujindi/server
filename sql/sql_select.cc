@@ -7765,13 +7765,12 @@ best_access_path(JOIN      *join,
       if (join->sort_nest_possible && !idx && !join->get_cardinality_estimate &&
           !s->table->keys_in_use_for_order_by.is_clear_all())
       {
-        double sorting_cost;
-        sorting_cost= sort_nest_oper_cost(join, records,
-                                          s->get_estimated_record_length(),
-                                          idx);
+        double sort_cost;
+        sort_cost= join->sort_nest_oper_cost(records, idx,
+                                             s->get_estimated_record_length());
         if (!s->table->keys_in_use_for_order_by.is_set(start_key->key))
         {
-          cost_of_sorting= sorting_cost;
+          cost_of_sorting= sort_cost;
           trace_access_idx.add("cost_of_sorting", cost_of_sorting);
           trace_access_idx.add("satisfies_ordering", false);
         }
@@ -8738,7 +8737,7 @@ greedy_search(JOIN      *join,
   uint      n_tables __attribute__((unused));
 
   double cardinality= DBL_MAX;
-  set_fraction_output_for_nest(join, &cardinality);
+  join->set_fraction_output_for_nest(&cardinality);
 
   DBUG_ENTER("greedy_search");
 
@@ -9524,15 +9523,20 @@ best_extension_by_limited_search(JOIN      *join,
   double best_record_count= DBL_MAX;
   double best_read_time=    DBL_MAX;
   bool disable_jbuf= (join->thd->variables.join_cache_level == 0) ||
-                      nest_created || limit_applied_to_nest;
+                      nest_created;
+  bool save_prefix_resolves_ordering= join->prefix_resolves_ordering;
 
   if (nest_created && !limit_applied_to_nest)
   {
-    Json_writer_object apply_limit(thd);
-    apply_limit.add("original_record_count", record_count);
+    double original_record_count= record_count;
     record_count= COST_MULT(record_count, join->fraction_output_for_nest);
-    apply_limit.add("record_count_after_limit_applied", record_count);
     limit_applied_to_nest= TRUE;
+    if (unlikely(thd->trace_started()))
+    {
+      Json_writer_object apply_limit(thd);
+      apply_limit.add("original_record_count", original_record_count);
+      apply_limit.add("record_count_after_limit_applied", record_count);
+    }
   }
 
   DBUG_EXECUTE("opt", print_plan(join, idx, record_count, read_time, read_time,
@@ -9580,15 +9584,20 @@ best_extension_by_limited_search(JOIN      *join,
         sort_nest_operation_here is set when we check if ORDER BY clause is
         satisfied by the partial join order, in the sort-nest branch of
         best_extension_by_limited_search.
+        TODO varun:
+          -why is this not needed for index scan on one table
+           for index scan that resloves ordering we apply the limit in
+           get_best_index_for_order_by_limit.
       */
-      if (!idx && join->sort_nest_possible && !join->get_cardinality_estimate &&
-          check_if_index_satisfies_ordering(s->table, index_used))
+      if (join->is_index_with_ordering_allowed(s->table, idx, index_used))
       {
         if (s->table->force_index)
         {
           /*
             have to apply the limit for the forced index, currently
             this is not done is best_access_path
+            TODO varun:
+              Let us try to move this from here to best_access_path.
           */
           position->records_read= COST_MULT(position->records_read,
                                             join->fraction_output_for_nest);
@@ -9681,43 +9690,41 @@ best_extension_by_limited_search(JOIN      *join,
       {
         /* Recursively expand the current partial plan */
         swap_variables(JOIN_TAB*, join->best_ref[idx], *pos);
-        bool nest_allow= (join->cur_sj_inner_tables == 0 &&
-                          join->cur_embedding_map == 0);
-        if (!idx && join->sort_nest_possible &&
-            !join->get_cardinality_estimate &&
-            check_if_index_satisfies_ordering(s->table, index_used))
+        /*
+          TODO varun:
+            Lets try to move this to a function
+        */
+        if (join->is_index_with_ordering_allowed(s->table, idx, index_used))
           limit_applied_to_nest= TRUE;
 
         /*
           TODO varun:
             1) get an optimizer switch to enable or disable the sort
                nest instead of a system variable
-            2) add a parameter to best_extension_by_limited_search so that
-               we don't call check_join_prefix_contains_ordering if the prefix
-               already satisfied the ordering.
         */
-        if (!nest_created && join->order &&
-            nest_allow && join->sort_nest_possible &&
-            !join->get_cardinality_estimate &&
-            check_join_prefix_contains_ordering(join, s, sort_nest_tables))
+        if (!nest_created &&
+            (join->prefix_resolves_ordering ||
+             join->consider_adding_sort_nest(sort_nest_tables |
+                                             real_table_bit)))
         {
           // SORT_NEST branch
           join->positions[idx].sort_nest_operation_here= TRUE;
-          double cost= 0;
-          if (needs_filesort(s, idx, index_used))
+          join->prefix_resolves_ordering= TRUE;
+          double sorting_cost= 0;
+          if (join->needs_filesort(s->table, idx, index_used))
           {
             ulong rec_len= cache_record_length_for_nest(join, idx);
-            cost= sort_nest_oper_cost(join, partial_join_cardinality,
-                                      rec_len, idx);
-            trace_one_table.add("cost_of_sorting", cost);
-            current_read_time= COST_ADD(current_read_time, cost);
+            sorting_cost= join->sort_nest_oper_cost(partial_join_cardinality,
+                                                    idx, rec_len);
+            trace_one_table.add("cost_of_sorting", sorting_cost);
           }
           Json_writer_array trace_rest(thd, "rest_of_plan");
           if (best_extension_by_limited_search(join,
                                                remaining_tables & ~real_table_bit,
                                                idx + 1,
                                                partial_join_cardinality,
-                                               current_read_time,
+                                               COST_ADD(current_read_time,
+                                                        sorting_cost),
                                                search_depth - 1,
                                                prune_level,
                                                use_cond_selectivity,
@@ -9769,8 +9776,8 @@ best_extension_by_limited_search(JOIN      *join,
           if (join->sort_nest_possible)
           {
             ulong rec_len= cache_record_length_for_nest(join, idx);
-            cost= sort_nest_oper_cost(join, partial_join_cardinality,
-                                      rec_len, idx);
+            cost= join->sort_nest_oper_cost(partial_join_cardinality, idx,
+                                            rec_len);
             trace_one_table.add("cost_of_sorting", cost);
           }
           else
@@ -9791,6 +9798,7 @@ best_extension_by_limited_search(JOIN      *join,
                                        current_read_time,
                                        "full_plan"););
       }
+      join->prefix_resolves_ordering= save_prefix_resolves_ordering;
       restore_prev_nj_state(s);
       restore_prev_sj_state(remaining_tables, s, idx);
     }
@@ -10034,6 +10042,10 @@ cache_record_length(JOIN *join,uint idx)
   return length;
 }
 
+
+/*
+  TODO varun: Add comments here
+*/
 
 static ulong
 cache_record_length_for_nest(JOIN *join,uint idx)

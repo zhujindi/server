@@ -66,9 +66,9 @@ Item **get_sargable_cond(JOIN *join, TABLE *table);
     This is why we need to substitute field items of the tables inside the
     sort-nest with sort-nest's field items.
 
-    For the condition in (2) there is no need for substitution as this condition
-    is internal to the nest and would be evaluated before we do the sorting
-    for the sort-nest.
+    For the condition in (2) there is no need for substitution as this
+    condition is internal to the nest and would be evaluated before we
+    do the sorting for the sort-nest.
 
     This function does the substitution for
       - WHERE clause
@@ -134,6 +134,9 @@ void JOIN::substitute_base_with_nest_field_items()
       substitutions_for_sjm_lookup(tab);
   }
 
+  /*
+    This needs a pointer to the nest, so that this could be used in general
+  */
   extract_condition_for_the_nest();
 
   /* Substituting WHERE clause's field items with sort-nest's field items */
@@ -233,8 +236,6 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab)
     Extract from the WHERE clause the sub-condition which is internal to the
     sort-nest
 
-  @param join          the join handler
-
   @details
     Extract the sub-condition from the WHERE clause that can be added to the
     tables inside the sort-nest and can be evaluated before the sorting is done
@@ -275,23 +276,18 @@ void JOIN::extract_condition_for_the_nest()
     check_cond_extraction_for_nest would set NO_EXTRACTION_FL for
     all the items that cannot be added to the inner tables of the nest.
     TODO varun:
-      -try replacing it with check_pushable_cond, looks similar
-      -change name of pushable_cond_checker_for_derived
+      -change name to check_pushable_cond_extraction
+      -please use 2 functions here, not use a structure, looks complex
   */
   CHECK_PUSHDOWN_FIELD_ARG arg= {sort_nest_info->nest_tables_map, TRUE};
 
-  orig_cond->check_cond_extraction_for_grouping_fields(&Item::pushable_cond_checker_for_tables,
-                                                       (uchar*)&arg);
+  orig_cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
+                                            (uchar*)&arg);
   /*
-    build_cond_for_grouping_fields would create the entire
-    condition that would be added to the tables inside the nest.
-    This may clone some items too.
+    build_pushable_condition would create a sub-condition that would be
+    added to the tables inside the nest. This may clone some items too.
   */
-  /*
-    TODO varun: need to re-factor this too, we need to make this function
-    part of the Item class , no need to have it in SELECT LEX
-  */
-  extracted_cond= orig_cond->build_cond_for_grouping_fields(thd, TRUE);
+  extracted_cond= orig_cond->build_pushable_condition(thd, TRUE);
 
   if (extracted_cond)
   {
@@ -364,32 +360,44 @@ void JOIN::propagate_equal_field_for_orderby()
 
 /*
   @brief
-    Checks if the current prefix of the join order satisfies the ORDER BY
-    clause or not.
+    Check whether ORDER BY items can be evaluated for a given prefix
 
-  @param join             JOIN handler
-  @param join_tab         joined table to check if addition of this
-                          table in the join order would achieve
-                          the ordering
-  @param previous_tables  table_map for all the tables in the prefix
+  @param previous_tables  table_map of all the tables in the prefix
                           of the current partial plan
 
+  @details
+    Here we walk through the ORDER BY items and check if the prefix of the
+    join resolves the ordering.
+    Also we look at the multiple equalities for each item in the ORDER BY list
+    to see if the ORDER BY items can be resolved by the given prefix.
+
+    Example
+      SELECT * FROM t1, t2, t3
+      WHERE t1.a = t2.a AND t2.b = t3.a
+      ORDER BY t2.a, t3.a
+      LIMIT 10;
+
+    Let's say the given prefix is table {t1,t3}, then this function would
+    return TRUE because there is an equality condition t2.a=t1.a ,
+    so t2.a can be resolved with t1.a. Hence the given prefix {t1,t3} would
+    resolve the ORDER BY clause.
+
   @retval
-   TRUE   ordering is achieved with the addition of new table
-   FALSE  ordering not achieved
+   TRUE   ordering can be evaluated by the given prefix
+   FALSE  otherwise
+
 */
 
-bool check_join_prefix_contains_ordering(JOIN *join, JOIN_TAB *tab,
-                                         table_map previous_tables)
+bool JOIN::check_join_prefix_resolves_ordering(table_map previous_tables)
 {
-  ORDER *order;
-  for (order= join->order; order; order= order->next)
+  DBUG_ASSERT(order);
+  ORDER *ord;
+  for (ord= order; ord; ord= ord->next)
   {
-    Item *order_item= order->item[0];
+    Item *order_item= ord->item[0];
     table_map order_tables=order_item->used_tables();
     if (!(order_tables & ~previous_tables) ||
-         (order_item->excl_dep_on_tables(previous_tables | tab->table->map,
-                                         FALSE)))
+         (order_item->excl_dep_on_tables(previous_tables, FALSE)))
       continue;
     else
       return FALSE;
@@ -461,7 +469,8 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables,
   @param nest_tables_map   map of top level tables inside the sort-nest
 
   @details
-    This sort-nest structure would hold all the information about the sort-nest.
+    This sort-nest structure would hold all the information about the
+    sort-nest.
 
   @retval
     FALSE     successful in creating the sort-nest info structure
@@ -482,8 +491,6 @@ bool JOIN::create_sort_nest_info(uint n_tables, table_map nest_tables_map)
 /*
   @brief
     Make the sort-nest.
-
-  @param join          the join handler
 
   @details
     Setup execution structures for sort-nest materialization:
@@ -624,27 +631,25 @@ bool JOIN::make_sort_nest()
 
 
 /*
-  @bried
+  @brief
     Calculate the cost of adding a sort-nest.
 
   @param
-    join                the join handler
     join_record_count   the cardinality of the partial join
-    rec_len             length of the record in the sort-nest table
     idx                 position of the joined table in the partial plan
+    rec_len             estimate of length of the record in the sort-nest table
 
   @details
     The calculation for the cost of the sort-nest is done here, the cost
-    included three components
-      - Filling the sort-nest table
-      - Sorting the sort-nest table
-      - Reading from the sort-nest table
+    includes three components
+      1) Filling the sort-nest table
+      2) Sorting the sort-nest table
+      3) Reading from the sort-nest table
 */
 
-double sort_nest_oper_cost(JOIN *join, double join_record_count,
-                           ulong rec_len, uint idx)
+double JOIN::sort_nest_oper_cost(double join_record_count, uint idx,
+                                 ulong rec_len)
 {
-  THD *thd= join->thd;
   double cost= 0;
   set_if_bigger(join_record_count, 1);
   /*
@@ -652,8 +657,8 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
     on the first non-const table. So for this case we don't need to add
     the cost of filling the table.
   */
-  if (idx != join->const_tables)
-    cost=  get_tmp_table_write_cost(thd, join_record_count,rec_len) *
+  if (idx != const_tables)
+    cost=  get_tmp_table_write_cost(thd, join_record_count, rec_len) *
            join_record_count; // cost to fill temp table
 
   /*
@@ -661,7 +666,7 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
     should we apply the limit here as we would read only
     join_record_count * selectivity_of_limit records
   */
-  cost+= get_tmp_table_lookup_cost(thd, join_record_count,rec_len) *
+  cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) *
          join_record_count;   // cost to perform post join operation used here
   cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) +
          (join_record_count == 0 ? 0 :
@@ -682,14 +687,15 @@ double sort_nest_oper_cost(JOIN *join, double join_record_count,
 
       cardinality(join of inner table of nest) * selectivity_of_limit;
 
-    Here selectivity of limit is how many records we would expect in the output.
-    selectivity_of_limit= limit / cardinality(join of all tables)
+    Here selectivity of limit is how many records we would expect in the
+    output.
+      selectivity_of_limit= limit / cardinality(join of all tables)
 
     This number of records is what we would also see in the EXPLAIN output
     for the sort-nest in the columns "rows".
 
-  @retval Number of records that the optimizer expects to be read
-          from the sort-nest
+  @retval Number of records that the optimizer expects to be read from the
+          sort-nest
 */
 
 double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
@@ -709,15 +715,18 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
 
 /*
   @brief
-    Find all indexes for a table that would satisfy the ORDER BY clause
+    Find all keys that can resolve the ORDER BY clause for a table
 
   @param
-    join                         join handler
-    table                        table structure
+    table                        table for which keys need to be found
 
   @details
-    This function sets the flag TABLE::keys_in_use_for_order_by
-    with all the index that satisfy the ORDER BY clause.
+    This function sets the flag TABLE::keys_in_use_for_order_by with all the
+    indexes of a table that can resolve the ORDER BY clause.
+
+  TODO varun:
+    1) create a map for the the keys that can be used for order by, don't use
+       the map keys_in_use_for_order_by, as this can cause problems?
 */
 
 void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
@@ -738,38 +747,38 @@ void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
 
 /*
   @brief
-    Checks if the partial plan needs Filesort for ordering.
+    Checks if the given prefix needs Filesort for ordering.
 
   @param
-    tab          joined table
-    idx          position of the joined table in the partial plan
-    index_used   >=0 number of the index that satisfies the ORDER BY clause
-                 -1  no index chosen that satisfies the ORDER BY clause
+    table          joined table
+    idx            position of the joined table in the partial plan
+    index_used     >=0 number of the index that is picked as best access
+                   -1  no index access chosen
+
+  @details
+    Here we check if a given prefix requires Filesort or index on the
+    first non-const table to resolve the ORDER BY clause.
+
   @retval
     TRUE   Filesort is needed
     FALSE  index present that satisfies the ordering
 */
 
-bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used)
+bool JOIN::needs_filesort(TABLE *table, uint idx, int index_used)
 {
-  JOIN *join= tab->join;
-  if (idx && idx == join->const_tables)
+  if (idx != const_tables)
     return TRUE;
 
-  TABLE *table= tab->table;
-  if (index_used >= 0 && index_used < MAX_KEY)
-   return !table->keys_in_use_for_order_by.is_set(index_used);
-  return TRUE;
+  return !check_if_index_satisfies_ordering(table, index_used);
 }
 
 /*
   @brief
-    Check if an index that achieves ordering on the first non-const table
-    is cheaper than the best access found.
+    Find a cheaper index that resolves ordering on the first non-const table.
 
   @param
     tab                       joined table
-    read_time [out]           cost for the best index picked
+    read_time [out]           cost for the best index picked if cheaper
     records   [out]           estimate of records going to be accessed by the
                               index
     cardinality               estimate of records in the join output
@@ -779,6 +788,13 @@ bool needs_filesort(JOIN_TAB *tab, uint idx, int index_used)
   @retval
     -1  no cheaper index found for ordering
     >=0 cheaper index found for ordering
+
+  TODO varun:
+    1) one line brief please
+    2) add comments about limit in the details section.
+    3) Mention that limit is picked from the join structure
+    4) This needs a detailed explanation, also mention it is picked from
+       test_if_cheaper_ordering
 */
 
 int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
@@ -803,11 +819,11 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
                                               if ORDER BY clause is present
                                               or not)
     6) join planner is run to get estimate of cardinality
-    7) If there is no index that achieves the ordering
+    7) If there is no index that can resolve the ORDER BY clause
   */
 
   if (join->select_limit == HA_POS_ERROR ||                    // (1)
-      idx ||                                                   // (2)
+      idx != join->const_tables ||                             // (2)
       cardinality == DBL_MAX ||                                // (3)
       table->force_index ||                                    // (4)
       !join->sort_nest_possible ||                             // (5)
@@ -891,8 +907,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
 
 /*
   @brief
-    Disallow join buffering for all the tables at the top level that are read
-    after sorting has been performed.
+    Disallow join buffering for tables that are read after sorting is done.
 
   @param
     tab                      table to check if join buffering is allowed or not
@@ -911,7 +926,8 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
     for the inner tables of the SJM.
 
   @retval
-
+    TRUE   Join buffering is allowed
+    FALSE  Otherwise
 */
 
 bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
@@ -931,28 +947,30 @@ bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
 
 /*
   @brief
-    Check if an index on the first non-const table satisfies the ORDER BY
-    clause or not.
+    Check if an index on the first non-const table resolves the ORDER BY clause.
 
   @param
     table                       First non-const table
     index_used                  index to be checked
 
   @retval
-    TRUE  index satisfies the ORDER BY clause
+    TRUE  index resolves the ORDER BY clause
     FALSE otherwise
 */
 
 bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
 {
-  if (!(index_used >=0 && index_used < MAX_KEY))
+  /*
+    index_used is set to
+    -1          for Table Scan
+    MAX_KEY     for HASH JOIN
+    >=0         for ref/range/index access
+  */
+  if (index_used < 0 || index_used == MAX_KEY)
     return FALSE;
 
-  if (!table->keys_in_use_for_order_by.is_clear_all())
-  {
-    if (table->keys_in_use_for_order_by.is_set(static_cast<uint>(index_used)))
-      return TRUE;
-  }
+  if (table->keys_in_use_for_order_by.is_set(static_cast<uint>(index_used)))
+    return TRUE;
   return FALSE;
 }
 
@@ -967,11 +985,21 @@ bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
     records                estimate of records to be read with range scan
 
   @details
-    Range scan is setup here for an index that satisfies the ORDER BY clause.
+    Range scan is setup here for an index that can resolve the ORDER BY clause.
+    There are 2 cases here:
+      1) If the range scan is on the same index for which we created
+         QUICK_SELECT when we ran the range optimizer earlier, then we try
+         to reuse it.
+      2) The range scan is on a different index then we need to create
+         QUICK_SELECT for the new key. This is done by running the range
+         optimizer again.
+
+    Also here we take into account if the ordering is in reverse direction.
+    For DESCENDING we try to reverse the QUICK_SELECT.
 
   @note
     This is done for the ORDER BY LIMIT optimization. We try to force creation
-    of range scan for the index the join planner picked for us. Also here
+    of range scan for an index that the join planner picked for us. Also here
     we reverse the range scan if the ordering is in reverse direction.
 */
 
@@ -997,6 +1025,10 @@ void JOIN::setup_range_scan(JOIN_TAB *tab, uint idx, double records)
 
   if (!(tab->quick && tab->quick->index == idx))
   {
+    /* Free the QUICK_SELECT that was built earlier. */
+    delete tab->quick;
+    tab->quick= NULL;
+
     keymap_for_range.clear_all();  // Force the creation of quick select
     keymap_for_range.set_bit(idx); // only for index using range access.
 
@@ -1033,8 +1065,8 @@ void JOIN::setup_range_scan(JOIN_TAB *tab, uint idx, double records)
   /*
     Fix for explain, the records here should be set to the value
     which was stored in the JOIN::best_positions object. This is needed
-    because we had made a new estimate of records read taking limit into
-    account.
+    because the estimate of rows to be read for the first non-const table had
+    taken selectivity of limit into account.
   */
   if (sort_nest_possible && records < tab->quick->records)
     tab->quick->records= records;
@@ -1048,10 +1080,23 @@ use_filesort:
 
 /*
   @brief
-    Setup range or index scan for ordering
+    Setup range/index scan to resolve ordering on the first non-const table.
 
   @param
     index_no        index for which index scan or range scan needs to be setup
+
+  @details
+    Here we try to prepare range scan or index scan for an index that can be
+    used to resolve the ORDER BY clause. This is used only for the first
+    non-const table of the join.
+
+    For range scan
+      There is a separate call to setup_range_scan, where the QUICK_SELECT is
+      created for range access. In case we are not able to create a range
+      access, we switch back to use Filesort on the first table.
+      see @setup_range_scan
+    For index scan
+      We just store the index in SORT_NEST_INFO::index_used.
 */
 
 void JOIN::setup_index_use_for_ordering(int index_no)
@@ -1095,6 +1140,9 @@ void JOIN::setup_index_use_for_ordering(int index_no)
   @retval
     >=0 index used to access the table
     -1  no index used to access table, probably table scan is done
+
+  TODO varun:
+    -consider hash join also.
 */
 
 int JOIN_TAB::get_index_on_table()
@@ -1114,58 +1162,64 @@ int JOIN_TAB::get_index_on_table()
   @brief
     Calculate the selectivity of limit.
 
-  @description
+  @param
+    cardinality[out]          set the output cardinality of the join
+
+  @details
+    The selectivity of limit is calculated as
+        selecitivity_of_limit=  rows_in_limit / cardinality_of_join
+
+  @note
     The selectivity that we get is used to make an estimate of rows
     that we would read from the partial join of the tables inside the
     sort-nest.
-  @param
-    join                      the join handler
-    cardinality[out]          set the output cardinality of the join
 */
 
-void set_fraction_output_for_nest(JOIN *join, double *cardinality)
+void JOIN::set_fraction_output_for_nest(double *cardinality)
 {
-  if (join->sort_nest_possible && !join->get_cardinality_estimate)
+  if (sort_nest_possible && !get_cardinality_estimate)
   {
-    double total_rows= join->join_record_count;
-    set_if_bigger(total_rows, 1);
-    *cardinality= total_rows;
-    join->fraction_output_for_nest= join->select_limit < total_rows ?
-                                    (join->select_limit / total_rows) :
-                                     1.0;
-    Json_writer_object trace_cardinality(join->thd);
-    trace_cardinality.add("cardinality", total_rows);
-    trace_cardinality.add("selectivity_of_limit",
-                          join->fraction_output_for_nest*100);
-
+    set_if_bigger(join_record_count, 1);
+    *cardinality= join_record_count;
+    fraction_output_for_nest= select_limit < join_record_count ?
+                              select_limit / join_record_count :
+                              1.0;
+    if (unlikely(thd->trace_started()))
+    {
+      Json_writer_object trace_limit(thd);
+      trace_limit.add("cardinality", join_record_count);
+      trace_limit.add("selectivity_of_limit", fraction_output_for_nest*100);
+    }
   }
 }
 
 
 /*
-  Sort nest is needed currently when one can shortcut the join execution.
+  @brief
+    Sort nest is allowed when one can shortcut the join execution.
 
-  So for the operations where one requires entire join computation to be
-  done first and then apply the operation on the join output,
-  such operations can't make use of the sort-nest.
-  So this function disables the use of sort-nest for such operations.
+  @details
+    For all the operations where one requires entire join computation to be
+    done first and then apply the operation on the join output,
+    such operations can't make use of the sort-nest.
+    So this function disables the use of sort-nest for such operations.
 
-  Sort nest is not allowed for
-  1) ORDER clause is not present
-  2) Only constant tables in the join
-  3) DISTINCT clause
-  4) GROUP BY CLAUSE
-  5) HAVING clause (that was not pushed to where)
-  6) Aggregate Functions
-  7) Window Functions
-  8) Using ROLLUP
-  9) Using SQL_BUFFER_RESULT
-  10) LIMIT is present
-  11) Only Select queries can use the sort nest
+    Sort nest is not allowed for
+    1) No ORDER BY clause
+    2) Only constant tables in the join
+    3) DISTINCT CLAUSE
+    4) GROUP BY CLAUSE
+    5) HAVING clause
+    6) Aggregate Functions
+    7) Window Functions
+    8) Using ROLLUP
+    9) Using SQL_BUFFER_RESULT
+    10) LIMIT is absent
+    11) Only SELECT queries can use the sort nest
 
-  Returns
-   TRUE if sort-nest is allowed
-   FALSE otherwise
+  @retval
+   TRUE     Sort-nest is allowed
+   FALSE    Otherwise
 
 */
 
@@ -1182,3 +1236,72 @@ bool JOIN::sort_nest_allowed()
            select_limit == HA_POS_ERROR ||
            thd->lex->sql_command != SQLCOM_SELECT);
 }
+
+/*
+  @brief
+    Consider adding a sort-nest on a prefix of the join
+
+  @param prefix_tables           map of all the tables in the prefix
+
+  @details
+    This function is used during the join planning stage, where the join
+    planner decides if it can add a sort-nest on a prefix of a join.
+    The join planner does not add the sort-nest in the following cases:
+      1) Queries where adding a sort-nest is not possible.
+         see @sort_nest_allowed
+      2) Join planner is run to get the cardinality of the join
+      3) All inner tables of an outer join are inside the nest or outside
+      4) All inner tables of a semi-join are inside the nest or outside
+      5) Given prefix cannot resolve the ORDER BY clause
+
+  @retval
+    TRUE   sort-nest can be added on a prefix of a join
+    FALSE  otherwise
+*/
+
+bool JOIN::consider_adding_sort_nest(table_map prefix_tables)
+{
+  if (!sort_nest_possible ||                        // (1)
+      get_cardinality_estimate ||                   // (2)
+      cur_embedding_map ||                          // (3)
+      cur_sj_inner_tables)                          // (4)
+    return FALSE;
+
+  return check_join_prefix_resolves_ordering(prefix_tables);  // (5)
+}
+
+
+/*
+  @brief
+    Check if index on a table is allowed to resolve the ORDER BY clause
+
+  @param
+    table                     joined table
+    idx                       position of the table in the partial plan
+    index_used                index to be checked
+
+  @details
+
+  @retval
+    TRUE    Index can be used to resolve ordering
+    FALSE   Otherwise
+
+*/
+
+bool JOIN::is_index_with_ordering_allowed(TABLE *table, uint idx,
+                                          int index_used)
+{
+  /*
+    AN index on a table can allowed to resolve ordering in these cases:
+      1) Table should be the first non-const table
+      2) Query that allows the ORDER BY LIMIT optimization.
+         @see sort_nest_allowed
+      3) Join planner is not run to get the estimate of cardinality
+      4) Index resolves the ORDER BY clause
+  */
+  return  idx == const_tables &&                                   // (1)
+          sort_nest_possible &&                                    // (2)
+          !get_cardinality_estimate &&                             // (3)
+          check_if_index_satisfies_ordering(table, index_used);    // (4)
+}
+

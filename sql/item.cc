@@ -7306,10 +7306,14 @@ void Item::check_pushable_cond(Pushdown_checker checker, uchar *arg)
     for the subformula when extracting the pushable condition.
     The flag FULL_EXTRACTION_FL allows to delete later all top level conjuncts
     from cond.
+
+  TODO varun:
+    rewrite the comments to make sense
+    also a note for sort-nest using this would make sense
+
 */
 
-void Item::check_cond_extraction_for_grouping_fields(Pushdown_checker checker,
-                                                     uchar *arg)
+void Item::check_pushable_cond_extraction(Pushdown_checker checker, uchar *arg)
 {
   if (get_extraction_flag() == NO_EXTRACTION_FL)
     return;
@@ -7327,7 +7331,7 @@ void Item::check_cond_extraction_for_grouping_fields(Pushdown_checker checker,
     Item *item;
     while ((item=li++))
     {
-      item->check_cond_extraction_for_grouping_fields(checker, arg);
+      item->check_pushable_cond_extraction(checker, arg);
       if (item->get_extraction_flag() !=  NO_EXTRACTION_FL)
       {
         count++;
@@ -7521,7 +7525,7 @@ Item *Item::build_pushable_cond(THD *thd,
     NULL if there is no such a condition
 */
 
-Item *Item::build_cond_for_grouping_fields(THD *thd, bool no_top_clones)
+Item *Item::build_pushable_condition(THD *thd, bool no_top_clones)
 {
   if (get_extraction_flag() == FULL_EXTRACTION_FL)
   {
@@ -7553,8 +7557,7 @@ Item *Item::build_cond_for_grouping_fields(THD *thd, bool no_top_clones)
         item->clear_extraction_flag();
         continue;
       }
-      Item *fix= item->build_cond_for_grouping_fields(thd,
-                                                      no_top_clones & cond_and);
+      Item *fix= item->build_pushable_condition(thd, no_top_clones & cond_and);
       if (unlikely(!fix))
       {
         if (cond_and)
