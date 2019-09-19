@@ -721,27 +721,31 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
     table                        table for which keys need to be found
 
   @details
-    This function sets the flag TABLE::keys_in_use_for_order_by with all the
+    This function sets the flag TABLE::keys_with_ordering with all the
     indexes of a table that can resolve the ORDER BY clause.
 
   TODO varun:
     1) create a map for the the keys that can be used for order by, don't use
-       the map keys_in_use_for_order_by, as this can cause problems?
+       the map keys_with_ordering, as this can cause problems?
 */
 
 void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
 {
   if (!sort_nest_possible)
     return;
-  key_map keys_with_ordering;
-  keys_with_ordering.clear_all();
+  table->keys_with_ordering.clear_all();
   for (uint index= 0; index < table->s->keys; index++)
   {
     if (table->keys_in_use_for_query.is_set(index) &&
         test_if_order_by_key(this, order, table, index))
-      keys_with_ordering.set_bit(index);
+      table->keys_with_ordering.set_bit(index);
   }
-  table->keys_in_use_for_order_by.intersect(keys_with_ordering);
+  /*
+    TODO varun:
+    Is this really required, I think a hint can be given as to which index to
+    use for ordering, if this is TRUE add a test case for this
+  */
+  table->keys_with_ordering.intersect(table->keys_in_use_for_order_by);
 }
 
 
@@ -828,7 +832,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
       table->force_index ||                                    // (4)
       !join->sort_nest_possible ||                             // (5)
       join->get_cardinality_estimate ||                        // (6)
-      table->keys_in_use_for_order_by.is_clear_all())          // (7)
+      table->keys_with_ordering.is_clear_all())                // (7)
     return -1;
 
   THD *thd= join->thd;
@@ -840,7 +844,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
   Json_writer_array considered_indexes(thd, "considered_indexes");
   for (uint idx= 0 ; idx < table->s->keys; idx++)
   {
-    if (!table->keys_in_use_for_order_by.is_set(idx))
+    if (!table->keys_with_ordering.is_set(idx))
       continue;
     Json_writer_object possible_key(thd);
     KEY *keyinfo= table->key_info + idx;
@@ -969,7 +973,7 @@ bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
   if (index_used < 0 || index_used == MAX_KEY)
     return FALSE;
 
-  if (table->keys_in_use_for_order_by.is_set(static_cast<uint>(index_used)))
+  if (table->keys_with_ordering.is_set(static_cast<uint>(index_used)))
     return TRUE;
   return FALSE;
 }

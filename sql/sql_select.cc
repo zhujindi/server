@@ -7763,12 +7763,12 @@ best_access_path(JOIN      *join,
       */
       double cost_of_sorting= 0;
       if (join->sort_nest_possible && !idx && !join->get_cardinality_estimate &&
-          !s->table->keys_in_use_for_order_by.is_clear_all())
+          !s->table->keys_with_ordering.is_clear_all())
       {
         double sort_cost;
         sort_cost= join->sort_nest_oper_cost(records, idx,
                                              s->get_estimated_record_length());
-        if (!s->table->keys_in_use_for_order_by.is_set(start_key->key))
+        if (!s->table->keys_with_ordering.is_set(start_key->key))
         {
           cost_of_sorting= sort_cost;
           trace_access_idx.add("cost_of_sorting", cost_of_sorting);
