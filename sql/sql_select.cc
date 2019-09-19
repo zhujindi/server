@@ -7759,20 +7759,25 @@ best_access_path(JOIN      *join,
         select * from t1 where t1.a=5 and c=2 order by b;
 
         we have 2 keys idx1(a,b) and idx2(a,c)
-        so cost of sorting needs to be added for idx2 and not for idx1
+        so cost of sorting needs to be added for idx2 but not for idx1
+        as it can resolve the ORDER BY clause
       */
       double cost_of_sorting= 0;
-      if (join->sort_nest_possible && !idx && !join->get_cardinality_estimate &&
-          !s->table->keys_with_ordering.is_clear_all())
+      if (join->sort_nest_possible &&
+          idx == join->const_tables &&
+          !join->get_cardinality_estimate)
       {
-        double sort_cost;
-        sort_cost= join->sort_nest_oper_cost(records, idx,
-                                             s->get_estimated_record_length());
-        if (!s->table->keys_with_ordering.is_set(start_key->key))
+        if (!join->check_if_index_satisfies_ordering(s->table, start_key->key))
         {
+          double sort_cost;
+          sort_cost= join->sort_nest_oper_cost(records, idx,
+                                             s->get_estimated_record_length());
           cost_of_sorting= sort_cost;
-          trace_access_idx.add("cost_of_sorting", cost_of_sorting);
-          trace_access_idx.add("satisfies_ordering", false);
+          if (unlikely(thd->trace_started()))
+          {
+            trace_access_idx.add("cost_of_sorting", cost_of_sorting);
+            trace_access_idx.add("satisfies_ordering", false);
+          }
         }
         else
         {
@@ -7780,10 +7785,16 @@ best_access_path(JOIN      *join,
             Apply limit here if possible, as ref access here achieves the
             key that would satisfy the ordering.
           */
-          trace_access_idx.add("records_before_limit_considered", records);
+          double records_before_limit_applied= records;
           records= COST_MULT(records, join->fraction_output_for_nest);
-          records= ceil(records);
-          trace_access_idx.add("records_after_limit_considered", records);
+          if (unlikely(thd->trace_started()))
+          {
+            trace_access_idx.add("records_before_limit_considered",
+                                 records_before_limit_applied);
+            trace_access_idx.add("records_after_limit_considered",
+                                 floor(records));
+            trace_access_idx.add("satisfies_ordering", true);
+          }
           tmp= records;
           set_if_smaller(tmp, (double) thd->variables.max_seeks_for_key);
           if (table->covering_keys.is_set(key))
@@ -7792,7 +7803,6 @@ best_access_path(JOIN      *join,
             tmp= table->file->read_time(key, 1,
                                         (ha_rows) MY_MIN(tmp,s->worst_seeks));
           tmp= COST_MULT(tmp, record_count);
-          trace_access_idx.add("satisfies_ordering", true);
         }
       }
 
