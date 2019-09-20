@@ -7808,7 +7808,8 @@ best_access_path(JOIN      *join,
 
       trace_access_idx.add("rows", records).add("cost", tmp);
 
-      if (tmp + cost_of_sorting+ 0.0001 < best_time - records/(double) TIME_FOR_COMPARE)
+      if (tmp + cost_of_sorting + 0.0001 < (best_time -
+                                            records/(double) TIME_FOR_COMPARE))
       {
         trace_access_idx.add("chosen", true);
         best_time= COST_ADD(COST_ADD(tmp, cost_of_sorting),
