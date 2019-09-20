@@ -8093,7 +8093,31 @@ best_access_path(JOIN      *join,
   trace_access_scan.end();
 
   double idx_time= best;
-  double idx_records= records;
+
+  /*
+    Use the estimate of rows read for a table for range/table scan
+    from TABLE::quick_condition_rows. This is due to the reason
+    records already take into account condition selectivity for the table
+    for range/table scan.
+  */
+
+  double idx_records= best_key ? records : s->table->quick_condition_rows;
+
+  if (!(join->is_index_with_ordering_allowed(idx) &&
+        check_if_index_satisfies_ordering(s->table, *index_used)))
+  {
+    /*
+      Also adding here the cost of sorting for best access method that cannot
+      resolve the ordering. This is done so that the cost comparison is more
+      accurate when we try to pick an index that can resolve the ordering
+      in the function get_best_index_for_order_by_limit().
+    */
+    double sort_cost;
+    sort_cost= join->sort_nest_oper_cost(idx_records, idx,
+                                         s->get_estimated_record_length());
+    idx_time+= sort_cost;
+
+  }
   int idx_no= get_best_index_for_order_by_limit(s, join->select_limit,
                                                 &idx_time,
                                                 &idx_records,

@@ -858,10 +858,10 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab,
   TABLE *table= tab->table;
   double save_read_time= *read_time;
   double save_records= *records;
-  
   double est_records= *records;
   double fanout= cardinality / est_records;
   int best_index=-1;
+  trace_index_for_ordering.add("rows_estimation", est_records);
   Json_writer_array considered_indexes(thd, "considered_indexes");
 
   for (uint idx= 0 ; idx < table->s->keys; idx++)
