@@ -313,6 +313,12 @@ static double table_cond_selectivity(JOIN *join, uint idx, JOIN_TAB *s,
 void set_postjoin_aggr_write_func(JOIN_TAB *tab);
 
 Item **get_sargable_cond(JOIN *join, TABLE *table);
+void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
+                                      ha_rows *select_limit_arg,
+                                      double fanout, double est_best_records,
+                                      uint nr, double *index_scan_time,
+                                      Json_writer_object *trace_possible_key);
 
 #ifndef DBUG_OFF
 
@@ -7767,7 +7773,7 @@ best_access_path(JOIN      *join,
           idx == join->const_tables &&
           !join->get_cardinality_estimate)
       {
-        if (!join->check_if_index_satisfies_ordering(s->table, start_key->key))
+        if (!check_if_index_satisfies_ordering(s->table, start_key->key))
         {
           double sort_cost;
           sort_cost= join->sort_nest_oper_cost(records, idx,
@@ -8089,7 +8095,9 @@ best_access_path(JOIN      *join,
 
   double idx_time= best;
   double idx_records= records;
-  int idx_no= get_best_index_for_order_by_limit(s, &idx_time, &idx_records,
+  int idx_no= get_best_index_for_order_by_limit(s, join->select_limit,
+                                                &idx_time,
+                                                &idx_records,
                                                 cardinality,
                                                 *index_used, idx);
 
@@ -28556,78 +28564,11 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
             select_limit= (ha_rows) (select_limit*rec_per_key);
         } /* group */
 
-        /* 
-          If tab=tk is not the last joined table tn then to get first
-          L records from the result set we can expect to retrieve
-          only L/fanout(tk,tn) where fanout(tk,tn) says how many
-          rows in the record set on average will match each row tk.
-          Usually our estimates for fanouts are too pessimistic.
-          So the estimate for L/fanout(tk,tn) will be too optimistic
-          and as result we'll choose an index scan when using ref/range
-          access + filesort will be cheaper.
-        */
-        select_limit= (ha_rows) (select_limit < fanout ?
-                                 1 : select_limit/fanout);
+        find_cost_of_index_with_ordering(thd, tab, table, &select_limit,
+                                         fanout, refkey_rows_estimate,
+                                         nr, &index_scan_time,
+                                         &possible_key);
 
-        /*
-          refkey_rows_estimate is E(#rows) produced by the table access
-          strategy that was picked without regard to ORDER BY ... LIMIT.
-
-          It will be used as the source of selectivity data. 
-          Use table->cond_selectivity as a better estimate which includes
-          condition selectivity too.
-        */
-        {
-          // we use MIN(...), because "Using LooseScan" queries have
-          // cond_selectivity=1 while refkey_rows_estimate has a better
-          // estimate.
-          refkey_rows_estimate= MY_MIN(refkey_rows_estimate,
-                                       ha_rows(table_records * 
-                                               table->cond_selectivity));
-        }
-
-        /*
-          We assume that each of the tested indexes is not correlated
-          with ref_key. Thus, to select first N records we have to scan
-          N/selectivity(ref_key) index entries. 
-          selectivity(ref_key) = #scanned_records/#table_records =
-          refkey_rows_estimate/table_records.
-          In any case we can't select more than #table_records.
-          N/(refkey_rows_estimate/table_records) > table_records
-          <=> N > refkey_rows_estimate.
-         */
-
-        if (select_limit > refkey_rows_estimate)
-          select_limit= table_records;
-        else
-          select_limit= (ha_rows) (select_limit *
-                                   (double) table_records /
-                                    refkey_rows_estimate);
-        possible_key.add("updated_limit", select_limit);
-        rec_per_key= keyinfo->actual_rec_per_key(keyinfo->user_defined_key_parts-1);
-        set_if_bigger(rec_per_key, 1);
-        /*
-          Here we take into account the fact that rows are
-          accessed in sequences rec_per_key records in each.
-          Rows in such a sequence are supposed to be ordered
-          by rowid/primary key. When reading the data
-          in a sequence we'll touch not more pages than the
-          table file contains.
-          TODO. Use the formula for a disk sweep sequential access
-          to calculate the cost of accessing data rows for one 
-          index entry.
-        */
-        index_scan_time= select_limit/rec_per_key *
-                         MY_MIN(rec_per_key, table->file->scan_time());
-        double range_scan_time;
-        if (get_range_limit_read_cost(tab, table, table_records, nr,
-                                      select_limit, &range_scan_time))
-        {
-          possible_key.add("range_scan_time", range_scan_time);
-          if (range_scan_time < index_scan_time)
-            index_scan_time= range_scan_time;
-        }
-        possible_key.add("index_scan_time", index_scan_time);
 
         if ((ref_key < 0 && (group || table->force_index || is_covering)) ||
             index_scan_time < read_time)

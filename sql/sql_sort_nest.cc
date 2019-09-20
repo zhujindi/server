@@ -32,6 +32,12 @@ bool get_range_limit_read_cost(const JOIN_TAB *tab, const TABLE *table,
                                ha_rows table_records, uint keynr,
                                ha_rows rows_limit, double *read_time);
 Item **get_sargable_cond(JOIN *join, TABLE *table);
+void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
+                                      ha_rows *select_limit_arg,
+                                      double fanout, double est_best_records,
+                                      uint nr, double *index_scan_time,
+                                      Json_writer_object *trace_possible_key);
 
 
 /*
@@ -789,93 +795,89 @@ bool JOIN::needs_filesort(TABLE *table, uint idx, int index_used)
     index_used                >=0 number of index used for best access
                               -1  no index used for best access
     idx                       position of the joined table in the partial plan
+
+  @details
+    Here we try to walk through all the indexes for the first non-const table
+    of a given prefix.
+    From these indexes we are only interested in the indexes that can resolve
+    the ORDER BY clause as we want to shortcut the join execution for ORDER BY
+    LIMIT optimization.
+
+    For each index we are interested in we try to estimate the records we
+    have to read to ensure #limit records in the join output.
+
+    Then with this estimate of records we calculate the cost of using an index
+    and try to find the best index for access.
+    If the best index found from here has a lower cost than the best access
+    found in best_access_path, we switch the access to use the index found
+    here.
+
   @retval
-    -1  no cheaper index found for ordering
-    >=0 cheaper index found for ordering
+    -1     no cheaper index found for ordering
+    >=0    cheaper index found for ordering
 
   TODO varun:
-    1) one line brief please
-    2) add comments about limit in the details section.
-    3) Mention that limit is picked from the join structure
-    4) This needs a detailed explanation, also mention it is picked from
+    1) Mention that limit is picked from the join structure
+    2) This needs a detailed explanation, also mention it is picked from
        test_if_cheaper_ordering
+    3) Maybe we can re-factor the code with test_if_cheaper_ordering.
 */
 
-int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
-                                      double *records, double cardinality,
-                                      int index_used, uint idx)
+int get_best_index_for_order_by_limit(JOIN_TAB *tab,
+                                      ha_rows select_limit_arg,
+                                      double *read_time,
+                                      double *records,
+                                      double cardinality,
+                                      int index_used,
+                                      uint idx)
 {
-  TABLE *table= tab->table;
   JOIN *join= tab->join;
-  double save_read_time= *read_time;
-  double save_records= *records;
-
   /**
-    Cases when there is no need to consider the indexes that achieve the
-    ordering
+    Cases when there is no need to consider indexes that can resolve the
+    ORDER BY clause
 
-    1) If there is no limit
-    2) Check index for ordering only for the first non-const table
-    3) Cardinality is DBL_MAX, then we don't need to consider the index,
-       it is sent to DBL_MAX for semi-join strategies
+    1) No LIMIT present
+    2) Table for which index is checked should be the first non-const table.
+    3) Cardinality is DBL_MAX
     4) Force index is used
-    5) Sort nest is possible is not possible (would also cover the case
-                                              if ORDER BY clause is present
-                                              or not)
-    6) join planner is run to get estimate of cardinality
-    7) If there is no index that can resolve the ORDER BY clause
+    5) Query does not use the ORDER BY LIMIT optimization with sort_nest
+       @see sort_nest_allowed
+    6) Join planner is run to get an estimate of cardinality for a join 
+    7) No index present that can resolve the ORDER BY clause
   */
 
-  if (join->select_limit == HA_POS_ERROR ||                    // (1)
+  if (select_limit_arg == HA_POS_ERROR ||                      // (1)
       idx != join->const_tables ||                             // (2)
       cardinality == DBL_MAX ||                                // (3)
-      table->force_index ||                                    // (4)
+      tab->table->force_index ||                               // (4)
       !join->sort_nest_possible ||                             // (5)
       join->get_cardinality_estimate ||                        // (6)
-      table->keys_with_ordering.is_clear_all())                // (7)
+      tab->table->keys_with_ordering.is_clear_all())           // (7)
     return -1;
 
   THD *thd= join->thd;
   Json_writer_object trace_index_for_ordering(thd);
+  TABLE *table= tab->table;
+  double save_read_time= *read_time;
+  double save_records= *records;
+  
   double est_records= *records;
   double fanout= cardinality / est_records;
   int best_index=-1;
-  ha_rows table_records= table->stat_records();
   Json_writer_array considered_indexes(thd, "considered_indexes");
+
   for (uint idx= 0 ; idx < table->s->keys; idx++)
   {
+    ha_rows select_limit= select_limit_arg;
     if (!table->keys_with_ordering.is_set(idx))
       continue;
     Json_writer_object possible_key(thd);
-    KEY *keyinfo= table->key_info + idx;
-        possible_key.add("index", keyinfo->name);
-    double rec_per_key, index_scan_time;
-    ha_rows select_limit= join->select_limit;
-    select_limit= (ha_rows) (select_limit < fanout ?
-                             1 : select_limit/fanout);
-
-    est_records= MY_MIN(est_records, ha_rows(table_records *
-                                             table->cond_selectivity));
-    if (select_limit > est_records)
-      select_limit= table_records;
-    else
-      select_limit= (ha_rows) (select_limit * (double) table_records /
-                               est_records);
-    possible_key.add("updated_limit", select_limit);
-    rec_per_key= keyinfo->actual_rec_per_key(keyinfo->user_defined_key_parts-1);
-    set_if_bigger(rec_per_key, 1);
-    index_scan_time= select_limit/rec_per_key *
-                     MY_MIN(rec_per_key, table->file->scan_time());
-    possible_key.add("index_scan_time", index_scan_time);
-    double range_scan_time;
-
-    if (get_range_limit_read_cost(tab, table, table_records, idx,
-                                  select_limit, &range_scan_time))
-    {
-      possible_key.add("range_scan_time", range_scan_time);
-      if (range_scan_time < index_scan_time)
-        index_scan_time= range_scan_time;
-    }
+    double index_scan_time;
+    possible_key.add("index", table->key_info[idx].name);
+    find_cost_of_index_with_ordering(thd, tab, table, &select_limit,
+                                     fanout, est_records,
+                                     idx, &index_scan_time,
+                                     &possible_key);
 
     if (index_scan_time < *read_time)
     {
@@ -885,10 +887,14 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
     }
   }
   considered_indexes.end();
-  trace_index_for_ordering.add("best_index",
-                                static_cast<ulonglong>(best_index));
-  trace_index_for_ordering.add("records", *records);
-  trace_index_for_ordering.add("best_cost", *read_time);
+
+  if (unlikely(thd->trace_started()))
+  {
+    trace_index_for_ordering.add("best_index",
+                                 static_cast<ulonglong>(best_index));
+    trace_index_for_ordering.add("records", *records);
+    trace_index_for_ordering.add("best_cost", *read_time);
+  }
 
   /*
     If an index already found satisfied the ordering and we picked an index
@@ -960,6 +966,8 @@ bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
   @retval
     TRUE  index resolves the ORDER BY clause
     FALSE otherwise
+  TODO varun
+    Maybe move this function to TABLE class
 */
 
 bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
@@ -1309,3 +1317,94 @@ bool JOIN::is_index_with_ordering_allowed(TABLE *table, uint idx,
           check_if_index_satisfies_ordering(table, index_used);    // (4)
 }
 
+
+void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
+                                      ha_rows *select_limit_arg,
+                                      double fanout, double est_best_records,
+                                      uint nr, double *index_scan_time,
+                                      Json_writer_object *trace_possible_key)
+{
+  KEY *keyinfo= table->key_info + nr;
+  ha_rows select_limit= *select_limit_arg;
+  double rec_per_key;
+  double table_records= table->stat_records();
+  /*
+    If tab=tk is not the last joined table tn then to get first
+    L records from the result set we can expect to retrieve
+    only L/fanout(tk,tn) where fanout(tk,tn) says how many
+    rows in the record set on average will match each row tk.
+    Usually our estimates for fanouts are too pessimistic.
+    So the estimate for L/fanout(tk,tn) will be too optimistic
+    and as result we'll choose an index scan when using ref/range
+    access + filesort will be cheaper.
+  */
+  select_limit= (ha_rows) (select_limit < fanout ?
+                           1 : select_limit/fanout);
+
+  /*
+    refkey_rows_estimate is E(#rows) produced by the table access
+    strategy that was picked without regard to ORDER BY ... LIMIT.
+
+    It will be used as the source of selectivity data.
+    Use table->cond_selectivity as a better estimate which includes
+    condition selectivity too.
+  */
+  {
+    // we use MIN(...), because "Using LooseScan" queries have
+    // cond_selectivity=1 while refkey_rows_estimate has a better
+    // estimate.
+    est_best_records= MY_MIN(est_best_records,
+                             ha_rows(table_records * table->cond_selectivity));
+  }
+
+  /*
+    We assume that each of the tested indexes is not correlated
+    with ref_key. Thus, to select first N records we have to scan
+    N/selectivity(ref_key) index entries.
+    selectivity(ref_key) = #scanned_records/#table_records =
+    refkey_rows_estimate/table_records.
+    In any case we can't select more than #table_records.
+    N/(refkey_rows_estimate/table_records) > table_records
+    <=> N > refkey_rows_estimate.
+   */
+
+  if (select_limit > est_best_records)
+    select_limit= table_records;
+  else
+    select_limit= (ha_rows) (select_limit *
+                             (double) table_records /
+                              est_best_records);
+
+  rec_per_key= keyinfo->actual_rec_per_key(keyinfo->user_defined_key_parts-1);
+  set_if_bigger(rec_per_key, 1);
+  /*
+    Here we take into account the fact that rows are
+    accessed in sequences rec_per_key records in each.
+    Rows in such a sequence are supposed to be ordered
+    by rowid/primary key. When reading the data
+    in a sequence we'll touch not more pages than the
+    table file contains.
+    TODO. Use the formula for a disk sweep sequential access
+    to calculate the cost of accessing data rows for one
+    index entry.
+  */
+  *index_scan_time= select_limit/rec_per_key *
+                    MY_MIN(rec_per_key, table->file->scan_time());
+
+  if (unlikely(thd->trace_started()))
+  {
+    trace_possible_key->add("updated_limit", select_limit);
+    trace_possible_key->add("index_scan_time", *index_scan_time);
+  }
+
+  double range_scan_time;
+  if (get_range_limit_read_cost(tab, table, table_records, nr,
+                                select_limit, &range_scan_time))
+  {
+    trace_possible_key->add("range_scan_time", range_scan_time);
+    if (range_scan_time < *index_scan_time)
+      *index_scan_time= range_scan_time;
+  }
+  *select_limit_arg= select_limit;
+}

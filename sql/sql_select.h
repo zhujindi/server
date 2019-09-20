@@ -2209,11 +2209,13 @@ bool mysql_explain_union(THD *thd, SELECT_LEX_UNIT *unit,
 double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 void check_cond_extraction_for_nest(THD *thd, Item *cond,
                                     Pushdown_checker checker, uchar* arg);
-int get_best_index_for_order_by_limit(JOIN_TAB *tab, double *read_time,
-                                      double *records, double cardinality,
-                                      int index_used, uint idx);
 bool check_if_index_satisfies_ordering(TABLE *table, int index_used);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
+int get_best_index_for_order_by_limit(JOIN_TAB *tab,
+                                      ha_rows select_limit_arg,
+                                      double *read_time,
+                                      double *records, double cardinality,
+                                      int index_used, uint idx);
 
 /*
   General routine to change field->ptr of a NULL-terminated array of Field
