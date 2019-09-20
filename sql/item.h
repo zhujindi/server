@@ -445,11 +445,6 @@ typedef struct replace_equal_field_arg
   struct st_join_table *context_tab;
 } REPLACE_EQUAL_FIELD_ARG;
 
-typedef struct check_pushdown_field_arg
-{
-  table_map tables_map;
-  bool multi_eq_checked;
-} CHECK_PUSHDOWN_FIELD_ARG;
 
 class Settable_routine_parameter
 {
@@ -2333,10 +2328,22 @@ public:
   */
   void check_pushable_cond_extraction(Pushdown_checker checker, uchar *arg);
 
+  /*
+    This function is used for the cases when we don't want to take into account
+    multiple equalities while finding dependency of items on tables.
+  */
   bool pushable_cond_checker_for_tables(uchar *arg)
   {
-    CHECK_PUSHDOWN_FIELD_ARG *param= (CHECK_PUSHDOWN_FIELD_ARG*)arg;
-    return excl_dep_on_tables(param->tables_map, param->multi_eq_checked);
+    return excl_dep_on_tables(*(table_map *)arg, TRUE);
+  }
+
+  /*
+    This function is used for the cases when we want to take into account
+    multiple equalities while finding dependency of items on tables.
+  */
+  bool pushable_cond_checker_for_tables_with_equalities(uchar *arg)
+  {
+    return excl_dep_on_tables(*(table_map *)arg, FALSE);
   }
 
   bool pushable_cond_checker_for_grouping_fields(uchar *arg)

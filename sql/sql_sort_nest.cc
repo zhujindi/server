@@ -285,10 +285,8 @@ void JOIN::extract_condition_for_the_nest()
       -change name to check_pushable_cond_extraction
       -please use 2 functions here, not use a structure, looks complex
   */
-  CHECK_PUSHDOWN_FIELD_ARG arg= {sort_nest_info->nest_tables_map, TRUE};
-
   orig_cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
-                                            (uchar*)&arg);
+                                          (uchar*)&nest_info->nest_tables_map);
   /*
     build_pushable_condition would create a sub-condition that would be
     added to the tables inside the nest. This may clone some items too.
