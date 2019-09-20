@@ -2924,7 +2924,8 @@ int JOIN::optimize_stage2()
         JOIN_TAB *first_tab= sort_nest_info->nest_tab;
         int idx= first_tab->get_index_on_table();
 
-        if (check_if_index_satisfies_ordering(first_tab->table, idx))
+        if (first_tab == join_tab + const_tables &&
+            check_if_index_satisfies_ordering(first_tab->table, idx))
         {
           resetup_access_for_ordering(first_tab, idx);
           ordered_index_usage= ordered_index_order_by;
@@ -7769,9 +7770,7 @@ best_access_path(JOIN      *join,
         as it can resolve the ORDER BY clause
       */
       double cost_of_sorting= 0;
-      if (join->sort_nest_possible &&
-          idx == join->const_tables &&
-          !join->get_cardinality_estimate)
+      if (join->is_index_with_ordering_allowed(idx))
       {
         if (!check_if_index_satisfies_ordering(s->table, start_key->key))
         {
@@ -9608,7 +9607,8 @@ best_extension_by_limited_search(JOIN      *join,
            for index scan that resloves ordering we apply the limit in
            get_best_index_for_order_by_limit.
       */
-      if (join->is_index_with_ordering_allowed(s->table, idx, index_used))
+      if (join->is_index_with_ordering_allowed(idx) &&
+          check_if_index_satisfies_ordering(s->table, index_used))
       {
         if (s->table->force_index)
         {
@@ -9713,7 +9713,8 @@ best_extension_by_limited_search(JOIN      *join,
           TODO varun:
             Lets try to move this to a function
         */
-        if (join->is_index_with_ordering_allowed(s->table, idx, index_used))
+        if (join->is_index_with_ordering_allowed(idx) &&
+            check_if_index_satisfies_ordering(s->table, index_used))
           limit_applied_to_nest= TRUE;
 
         /*

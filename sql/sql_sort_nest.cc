@@ -1283,7 +1283,7 @@ bool JOIN::consider_adding_sort_nest(table_map prefix_tables)
 
 /*
   @brief
-    Check if index on a table is allowed to resolve the ORDER BY clause
+    Check if indexes on a table are allowed to resolve the ORDER BY clause
 
   @param
     table                     joined table
@@ -1293,26 +1293,23 @@ bool JOIN::consider_adding_sort_nest(table_map prefix_tables)
   @details
 
   @retval
-    TRUE    Index can be used to resolve ordering
+    TRUE    Indexes are allowed to resolve ORDER BY clause
     FALSE   Otherwise
 
 */
 
-bool JOIN::is_index_with_ordering_allowed(TABLE *table, uint idx,
-                                          int index_used)
+bool JOIN::is_index_with_ordering_allowed(uint idx)
 {
   /*
-    AN index on a table can allowed to resolve ordering in these cases:
+    An index on a table can allowed to resolve ordering in these cases:
       1) Table should be the first non-const table
       2) Query that allows the ORDER BY LIMIT optimization.
          @see sort_nest_allowed
       3) Join planner is not run to get the estimate of cardinality
-      4) Index resolves the ORDER BY clause
   */
   return  idx == const_tables &&                                   // (1)
           sort_nest_possible &&                                    // (2)
-          !get_cardinality_estimate &&                             // (3)
-          check_if_index_satisfies_ordering(table, index_used);    // (4)
+          !get_cardinality_estimate                                // (3)
 }
 
 

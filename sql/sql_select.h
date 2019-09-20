@@ -1859,7 +1859,7 @@ public:
   void set_fraction_output_for_nest(double *cardinality);
   double sort_nest_oper_cost(double join_record_count, uint idx,
                              ulong rec_len);
-  bool is_index_with_ordering_allowed(TABLE *table, uint idx, int index_used);
+  bool is_index_with_ordering_allowed(uint idx);
 
   bool choose_subquery_plan(table_map join_tables);
   void get_partial_cost_and_fanout(int end_tab_idx,
