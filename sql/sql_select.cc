@@ -8092,8 +8092,6 @@ best_access_path(JOIN      *join,
   }
   trace_access_scan.end();
 
-  double idx_time= best;
-
   /*
     Use the estimate of rows read for a table for range/table scan
     from TABLE::quick_condition_rows. This is due to the reason
@@ -8102,21 +8100,35 @@ best_access_path(JOIN      *join,
   */
 
   double idx_records= best_key ? records : s->table->quick_condition_rows;
-
-  if (!(join->is_index_with_ordering_allowed(idx) &&
-        check_if_index_satisfies_ordering(s->table, *index_used)))
+  double idx_time= best;
+  if (join->is_index_with_ordering_allowed(idx))
   {
-    /*
-      Also adding here the cost of sorting for best access method that cannot
-      resolve the ordering. This is done so that the cost comparison is more
-      accurate when we try to pick an index that can resolve the ordering
-      in the function get_best_index_for_order_by_limit().
-    */
-    double sort_cost;
-    sort_cost= join->sort_nest_oper_cost(idx_records, idx,
-                                         s->get_estimated_record_length());
-    idx_time+= sort_cost;
-
+    if (check_if_index_satisfies_ordering(s->table, *index_used))
+    {
+      /*
+        Removing the selectivity of limit taken into account for an access
+        which could resolve the ORDER BY clause by using an index.
+        This is done because we apply the selectivity again in the function
+        get_best_index_for_order_by_limit, so we make sure that the
+        selectivity is not applied twice.
+      */
+      idx_records= MY_MIN(s->table->stat_records(),
+                          COST_MULT(idx_records,
+                                    1 / join->fraction_output_for_nest));
+    }
+    else
+    {
+      /*
+        Also adding here the cost of sorting for best access method that cannot
+        resolve the ordering. This is done so that the cost comparison is more
+        accurate when we try to pick an index that can resolve the ordering
+        in the function get_best_index_for_order_by_limit().
+      */
+      double sort_cost;
+      sort_cost= join->sort_nest_oper_cost(idx_records, idx,
+                                           s->get_estimated_record_length());
+      idx_time+= sort_cost;
+    }
   }
   int idx_no= get_best_index_for_order_by_limit(s, join->select_limit,
                                                 &idx_time,

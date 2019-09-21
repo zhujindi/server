@@ -286,7 +286,7 @@ void JOIN::extract_condition_for_the_nest()
       -please use 2 functions here, not use a structure, looks complex
   */
   orig_cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
-                                          (uchar*)&nest_info->nest_tables_map);
+                                     (uchar*)&sort_nest_info->nest_tables_map);
   /*
     build_pushable_condition would create a sub-condition that would be
     added to the tables inside the nest. This may clone some items too.
@@ -859,7 +859,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab,
   double save_read_time= *read_time;
   double save_records= *records;
   double est_records= *records;
-  double fanout= cardinality / est_records;
+  double fanout= MY_MAX(1.0, cardinality / est_records);
   int best_index=-1;
   trace_index_for_ordering.add("rows_estimation", est_records);
   Json_writer_array considered_indexes(thd, "considered_indexes");
@@ -1309,7 +1309,7 @@ bool JOIN::is_index_with_ordering_allowed(uint idx)
   */
   return  idx == const_tables &&                                   // (1)
           sort_nest_possible &&                                    // (2)
-          !get_cardinality_estimate                                // (3)
+          !get_cardinality_estimate;                               // (3)
 }
 
 
