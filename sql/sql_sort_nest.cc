@@ -790,7 +790,6 @@ bool JOIN_TAB::needs_filesort(uint idx, int index_used)
     read_time [out]           cost for the best index picked if cheaper
     records   [out]           estimate of records going to be accessed by the
                               index
-    cardinality               estimate of records in the join output
     index_used                >=0 number of index used for best access
                               -1  no index used for best access
     idx                       position of the joined table in the partial plan
@@ -826,32 +825,27 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab,
                                       ha_rows select_limit_arg,
                                       double *read_time,
                                       double *records,
-                                      double cardinality,
                                       int index_used,
                                       uint idx)
 {
+  double cardinality;
   JOIN *join= tab->join;
+  cardinality= join->cardinality_estimate;
   /**
     Cases when there is no need to consider indexes that can resolve the
     ORDER BY clause
 
-    1) No LIMIT present
-    2) Table for which index is checked should be the first non-const table.
-    3) Cardinality is DBL_MAX
-    4) Force index is used
-    5) Query does not use the ORDER BY LIMIT optimization with sort_nest
+    1) Table in consideration should be the first non-const table.
+    2) Query does not use the ORDER BY LIMIT optimization with sort_nest
        @see sort_nest_allowed
-    6) Join planner is run to get an estimate of cardinality for a join 
-    7) No index present that can resolve the ORDER BY clause
+    3) Join planner is run to get an estimate of cardinality for a join
+    4) No index present that can resolve the ORDER BY clause
   */
 
-  if (select_limit_arg == HA_POS_ERROR ||                      // (1)
-      idx != join->const_tables ||                             // (2)
-      cardinality == DBL_MAX ||                                // (3)
-      tab->table->force_index ||                               // (4)
-      !join->sort_nest_possible ||                             // (5)
-      join->get_cardinality_estimate ||                        // (6)
-      tab->table->keys_with_ordering.is_clear_all())           // (7)
+  if (idx != join->const_tables ||                             // (1)
+      !join->sort_nest_possible ||                             // (2)
+      join->get_cardinality_estimate ||                        // (3)
+      tab->table->keys_with_ordering.is_clear_all())           // (4)
     return -1;
 
   THD *thd= join->thd;
@@ -1114,6 +1108,9 @@ void JOIN::setup_index_use_for_ordering(int index_no)
   sort_nest_info->nest_tab= join_tab + const_tables;
   POSITION *cur_pos= &best_positions[const_tables];
   JOIN_TAB *tab= cur_pos->table;
+
+  if (cur_pos->key)
+    return;
 
   index_no= (index_no == -1) ?
             (cur_pos->table->quick ? cur_pos->table->quick->index : -1) :

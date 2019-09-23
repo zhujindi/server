@@ -876,8 +876,6 @@ public:
                                double    record_count,
                                struct st_position *pos,
                                struct st_position *loose_scan_pos,
-                               int *index_used,
-                               double cardinality,
                                table_map sort_nest_tables,
                                bool nest_created);
   friend bool get_best_combination(JOIN *join);
@@ -1682,6 +1680,7 @@ public:
     fraction_output_for_nest= 1;
     prefix_resolves_ordering= FALSE;
     get_cardinality_estimate= FALSE;
+    cardinality_estimate= DBL_MAX;
   }
 
   /* True if the plan guarantees that it will be returned zero or one row */
@@ -2220,8 +2219,7 @@ void check_cond_extraction_for_nest(THD *thd, Item *cond,
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
 int get_best_index_for_order_by_limit(JOIN_TAB *tab,
                                       ha_rows select_limit_arg,
-                                      double *read_time,
-                                      double *records, double cardinality,
+                                      double *read_time, double *records,
                                       int index_used, uint idx);
 
 /*

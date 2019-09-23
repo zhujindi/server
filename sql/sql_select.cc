@@ -111,7 +111,6 @@ void best_access_path(JOIN *join, JOIN_TAB *s,
                       table_map remaining_tables, uint idx,
                       bool disable_jbuf, double record_count,
                       POSITION *pos, POSITION *loose_scan_pos,
-                      int *index_used, double cardinality,
                       table_map sort_nest_tables, bool nest_created);
 static void optimize_straight_join(JOIN *join, table_map join_tables);
 static bool greedy_search(JOIN *join, table_map remaining_tables,
@@ -7236,9 +7235,6 @@ double matching_candidates_in_table(JOIN_TAB *s, bool with_found_constraint,
   @param pos              OUT Table access plan
   @param loose_scan_pos   OUT Table plan that uses loosescan, or set cost to 
                               DBL_MAX if not possible.
-  @param index_used       OUT returns the index number that was used to access
-                              the table in s
-                              -1 if no index is used
   @param cardinality      contains the estimate of records for the best
                           join order (if the join optimizer is run once
                           to get the best cardinality else it is set to
@@ -7256,7 +7252,6 @@ best_access_path(JOIN      *join,
                  double    record_count,
                  POSITION *pos,
                  POSITION *loose_scan_pos,
-                 int *index_used, double cardinality,
                  table_map sort_nest_tables, bool nest_created)
 {
   THD *thd= join->thd;
@@ -7277,6 +7272,7 @@ best_access_path(JOIN      *join,
   SplM_plan_info *spl_plan= 0;
   Range_rowid_filter_cost_info *filter= 0;
   const char* cause= NULL;
+  int index_picked= -1;
   int index_used_for_access= -1;
 
   disable_jbuf= disable_jbuf || idx == join->const_tables;  
@@ -7892,7 +7888,7 @@ best_access_path(JOIN      *join,
   }
 
   index_used_for_access= best_key ? best_key->key : -1;
-  *index_used= index_used_for_access;
+  index_picked= index_used_for_access;
   /*
     Don't test table scan if it can't be better.
     Prefer key lookup if we would use the same key for scanning.
@@ -8070,7 +8066,7 @@ best_access_path(JOIN      *join,
       best_uses_jbuf= MY_TEST(!disable_jbuf && !((s->table->map &
                                                   join->outer_join)));
       spl_plan= 0;
-      *index_used= index_used_for_access;
+      index_picked= index_used_for_access;
     }
     trace_access_scan.add("chosen", best_key == NULL);
   }
@@ -8102,7 +8098,7 @@ best_access_path(JOIN      *join,
   double idx_time= best;
   if (join->is_index_with_ordering_allowed(idx))
   {
-    if (s->check_if_index_satisfies_ordering(*index_used))
+    if (s->check_if_index_satisfies_ordering(index_picked))
     {
       /*
         Removing the selectivity of limit taken into account for an access
@@ -8132,8 +8128,7 @@ best_access_path(JOIN      *join,
   int idx_no= get_best_index_for_order_by_limit(s, join->select_limit,
                                                 &idx_time,
                                                 &idx_records,
-                                                cardinality,
-                                                *index_used, idx);
+                                                index_picked, idx);
 
   if (idx_no >= 0)
   {
@@ -8143,7 +8138,7 @@ best_access_path(JOIN      *join,
     best_filter= 0;
     spl_plan= 0;
     records= idx_records;
-    *index_used= idx_no;
+    index_picked= idx_no;
   }
 
 
@@ -8158,7 +8153,7 @@ best_access_path(JOIN      *join,
   pos->spl_plan= spl_plan;
   pos->range_rowid_filter_info= best_filter;
   pos->sort_nest_operation_here= FALSE;
-  pos->index_no= idx_no;
+  pos->index_no= index_picked;
 
   loose_scan_opt.save_to_position(s, loose_scan_pos);
 
@@ -8642,7 +8637,6 @@ optimize_straight_join(JOIN *join, table_map join_tables)
   uint use_cond_selectivity= 
          join->thd->variables.optimizer_use_condition_selectivity;
   POSITION  loose_scan_pos;
-  int index_used;
   THD *thd= join->thd;
 
   for (JOIN_TAB **pos= join->best_ref + idx ; (s= *pos) ; pos++)
@@ -8656,8 +8650,7 @@ optimize_straight_join(JOIN *join, table_map join_tables)
     }
     /* Find the best access method from 's' to the current partial plan */
     best_access_path(join, s, join_tables, idx, disable_jbuf, record_count,
-                     position, &loose_scan_pos, &index_used, DBL_MAX, 0,
-                     FALSE);
+                     position, &loose_scan_pos, 0, FALSE);
 
     /* compute the cost of the new plan extended with 's' */
     record_count= COST_MULT(record_count, position->records_read);
@@ -9579,12 +9572,14 @@ best_extension_by_limited_search(JOIN      *join,
     double original_record_count= record_count;
     record_count= COST_MULT(record_count, join->fraction_output_for_nest);
     limit_applied_to_nest= TRUE;
+
     if (unlikely(thd->trace_started()))
     {
       Json_writer_object apply_limit(thd);
       apply_limit.add("original_record_count", original_record_count);
       apply_limit.add("record_count_after_limit_applied", record_count);
     }
+
   }
 
   DBUG_EXECUTE("opt", print_plan(join, idx, record_count, read_time, read_time,
@@ -9623,8 +9618,7 @@ best_extension_by_limited_search(JOIN      *join,
       POSITION loose_scan_pos;
       best_access_path(join, s, remaining_tables, idx, disable_jbuf,
                        record_count, position, &loose_scan_pos,
-                       &index_used, DBL_MAX, sort_nest_tables,
-                       nest_created);
+                       sort_nest_tables, nest_created);
 
       /*
         sort_nest_operation_here is set to TRUE here in the special case
@@ -9632,26 +9626,12 @@ best_extension_by_limited_search(JOIN      *join,
         sort_nest_operation_here is set when we check if ORDER BY clause is
         satisfied by the partial join order, in the sort-nest branch of
         best_extension_by_limited_search.
-        TODO varun:
-          -why is this not needed for index scan on one table
-           for index scan that resloves ordering we apply the limit in
-           get_best_index_for_order_by_limit.
       */
-      if (join->is_index_with_ordering_allowed(idx) &&
+      index_used= position->index_no;
+      if ((join->table_count - join->const_tables == 1) &&
+          join->is_index_with_ordering_allowed(idx) &&
           s->check_if_index_satisfies_ordering(index_used))
       {
-        if (s->table->force_index)
-        {
-          /*
-            have to apply the limit for the forced index, currently
-            this is not done is best_access_path
-            TODO varun:
-              Let us try to move this from here to best_access_path.
-          */
-          position->records_read= COST_MULT(position->records_read,
-                                            join->fraction_output_for_nest);
-          position->index_no= index_used;
-        }
         position->sort_nest_operation_here= TRUE;
       }
 
@@ -17176,7 +17156,6 @@ void optimize_wo_join_buffering(JOIN *join, uint first_tab, uint last_tab,
   */
   table_map save_cur_sj_inner_tables= join->cur_sj_inner_tables;
   join->cur_sj_inner_tables= 0;
-  int index_used;
 
   for (i= first_tab; i <= last_tab; i++)
   {
@@ -17187,8 +17166,7 @@ void optimize_wo_join_buffering(JOIN *join, uint first_tab, uint last_tab,
     {
       /* Find the best access method that would not use join buffering */
       best_access_path(join, rs, reopt_remaining_tables, i, 
-                       TRUE, rec_count, &pos, &loose_scan_pos,
-                       &index_used, DBL_MAX, 0, FALSE);
+                       TRUE, rec_count, &pos, &loose_scan_pos, 0, FALSE);
     }
     else 
       pos= join->positions[i];
