@@ -125,7 +125,6 @@ static bool best_extension_by_limited_search(JOIN *join,
                                              uint use_cond_selectivity,
                                              table_map sort_nest_tables,
                                              bool nest_created,
-                                             double cardinality,
                                              bool limit_applied_to_nest);
 static uint determine_search_depth(JOIN* join);
 C_MODE_START
@@ -2925,7 +2924,7 @@ int JOIN::optimize_stage2()
         int idx= first_tab->get_index_on_table();
 
         if (first_tab == join_tab + const_tables &&
-            check_if_index_satisfies_ordering(first_tab->table, idx))
+            first_tab->check_if_index_satisfies_ordering(idx))
         {
           resetup_access_for_ordering(first_tab, idx);
           ordered_index_usage= ordered_index_order_by;
@@ -5398,7 +5397,7 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
         all select distinct fields participate in one index.
       */
       add_group_and_distinct_keys(join, s);
-      join->find_keys_that_can_achieve_ordering(s->table);
+      s->find_keys_that_can_achieve_ordering();
       s->get_estimated_record_length();
 
       s->table->cond_selectivity= 1.0;
@@ -7772,7 +7771,7 @@ best_access_path(JOIN      *join,
       double cost_of_sorting= 0;
       if (join->is_index_with_ordering_allowed(idx))
       {
-        if (!check_if_index_satisfies_ordering(s->table, start_key->key))
+        if (!s->check_if_index_satisfies_ordering(start_key->key))
         {
           double sort_cost;
           sort_cost= join->sort_nest_oper_cost(records, idx,
@@ -8103,7 +8102,7 @@ best_access_path(JOIN      *join,
   double idx_time= best;
   if (join->is_index_with_ordering_allowed(idx))
   {
-    if (check_if_index_satisfies_ordering(s->table, *index_used))
+    if (s->check_if_index_satisfies_ordering(*index_used))
     {
       /*
         Removing the selectivity of limit taken into account for an access
@@ -8361,7 +8360,8 @@ choose_plan(JOIN *join, table_map join_tables)
       /* Automatically determine a reasonable value for 'search_depth' */
       search_depth= determine_search_depth(join);
 
-    if (join->sort_nest_possible && join->estimate_cardinality(join_tables))
+    if (join->sort_nest_possible &&
+        join->estimate_cardinality_for_join(join_tables))
       DBUG_RETURN(TRUE);
 
     if (greedy_search(join, join_tables, search_depth, prune_level,
@@ -8790,8 +8790,7 @@ greedy_search(JOIN      *join,
   // ==join->tables or # tables in the sj-mat nest we're optimizing
   uint      n_tables __attribute__((unused));
 
-  double cardinality= DBL_MAX;
-  join->set_fraction_output_for_nest(&cardinality);
+  join->set_fraction_output_for_nest();
 
   DBUG_ENTER("greedy_search");
 
@@ -8814,7 +8813,7 @@ greedy_search(JOIN      *join,
                                           prune_level),
                                          use_cond_selectivity,
                                          sort_nest_tables, FALSE,
-                                         cardinality, FALSE))
+                                         FALSE))
       DBUG_RETURN(TRUE);
     /*
       'best_read < DBL_MAX' means that optimizer managed to find
@@ -9524,10 +9523,6 @@ double table_cond_selectivity(JOIN *join, uint idx, JOIN_TAB *s,
   @param nest_created     set to TRUE if a prefix join order satisfied
                           the ORDER BY clause and we can add a sort-nest
                           on the found prefix
-  @param cardinality      contains the estimate of records for the best
-                          join order (if the join optimizer is run once
-                          to get the best cardinality else it is set to
-                          DBL_MAX)
   @param limit_applied_to_nest TRUE if limit is applied for the sort-nest
                                     cost calculation
                                 FALSE otherwise
@@ -9548,9 +9543,8 @@ best_extension_by_limited_search(JOIN      *join,
                                  uint      prune_level,
                                  uint      use_cond_selectivity,
                                  table_map sort_nest_tables,
-                                 bool nest_created,
-                                 double cardinality,
-                                 bool limit_applied_to_nest)
+                                 bool      nest_created,
+                                 bool      limit_applied_to_nest)
 {
   DBUG_ENTER("best_extension_by_limited_search");
 
@@ -9629,7 +9623,7 @@ best_extension_by_limited_search(JOIN      *join,
       POSITION loose_scan_pos;
       best_access_path(join, s, remaining_tables, idx, disable_jbuf,
                        record_count, position, &loose_scan_pos,
-                       &index_used, cardinality, sort_nest_tables,
+                       &index_used, DBL_MAX, sort_nest_tables,
                        nest_created);
 
       /*
@@ -9644,7 +9638,7 @@ best_extension_by_limited_search(JOIN      *join,
            get_best_index_for_order_by_limit.
       */
       if (join->is_index_with_ordering_allowed(idx) &&
-          check_if_index_satisfies_ordering(s->table, index_used))
+          s->check_if_index_satisfies_ordering(index_used))
       {
         if (s->table->force_index)
         {
@@ -9750,7 +9744,7 @@ best_extension_by_limited_search(JOIN      *join,
             Lets try to move this to a function
         */
         if (join->is_index_with_ordering_allowed(idx) &&
-            check_if_index_satisfies_ordering(s->table, index_used))
+            s->check_if_index_satisfies_ordering(index_used))
           limit_applied_to_nest= TRUE;
 
         /*
@@ -9767,7 +9761,7 @@ best_extension_by_limited_search(JOIN      *join,
           join->positions[idx].sort_nest_operation_here= TRUE;
           join->prefix_resolves_ordering= TRUE;
           double sorting_cost= 0;
-          if (join->needs_filesort(s->table, idx, index_used))
+          if (s->needs_filesort(idx, index_used))
           {
             ulong rec_len= cache_record_length_for_nest(join, idx);
             sorting_cost= join->sort_nest_oper_cost(partial_join_cardinality,
@@ -9785,8 +9779,7 @@ best_extension_by_limited_search(JOIN      *join,
                                                prune_level,
                                                use_cond_selectivity,
                                                sort_nest_tables | real_table_bit,
-                                               TRUE, cardinality,
-                                               limit_applied_to_nest))
+                                               TRUE, limit_applied_to_nest))
             DBUG_RETURN(TRUE);
           join->positions[idx].sort_nest_operation_here= FALSE;
           trace_rest.end();
@@ -9802,7 +9795,7 @@ best_extension_by_limited_search(JOIN      *join,
                                              use_cond_selectivity,
                                              nest_created ? sort_nest_tables :
                                              sort_nest_tables | real_table_bit,
-                                             nest_created, cardinality,
+                                             nest_created,
                                              limit_applied_to_nest))
           DBUG_RETURN(TRUE);
         trace_rest.end();
@@ -29230,7 +29223,7 @@ void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
     FALSE        otherwise
 */
 
-bool JOIN::estimate_cardinality(table_map joined_tables)
+bool JOIN::estimate_cardinality_for_join(table_map joined_tables)
 {
   Json_writer_temp_disable disable_tracing(thd);
   uint search_depth= thd->variables.optimizer_search_depth;
@@ -29245,16 +29238,24 @@ bool JOIN::estimate_cardinality(table_map joined_tables)
     save_best_ref[i]= best_ref[i];
 
   get_cardinality_estimate= TRUE;
+  cardinality_estimate= DBL_MAX;
+
   if (greedy_search(this, joined_tables, search_depth, prune_level,
                     use_cond_selectivity))
     return TRUE;
+
+  set_if_bigger(join_record_count, 1);
+  cardinality_estimate= join_record_count;
+
   cur_embedding_map= 0;
   reset_nj_counters(this, join_list);
   cur_sj_inner_tables= 0;
   get_cardinality_estimate= FALSE;
   sort_by_table= save_sort_by_table;
+
   for (uint i= 0; i < table_count; i++)
     best_ref[i]= save_best_ref[i];
+
   return FALSE;
 }
 

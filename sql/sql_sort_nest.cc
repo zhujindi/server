@@ -154,6 +154,7 @@ void JOIN::substitute_base_with_nest_field_items()
   }
 }
 
+
 /*
   @brief
     Substitute ref access field items with sort-nest field items.
@@ -185,6 +186,7 @@ void JOIN::substitute_ref_items(JOIN_TAB *tab)
     }
   }
 }
+
 
 /*
   @brief
@@ -721,9 +723,6 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
   @brief
     Find all keys that can resolve the ORDER BY clause for a table
 
-  @param
-    table                        table for which keys need to be found
-
   @details
     This function sets the flag TABLE::keys_with_ordering with all the
     indexes of a table that can resolve the ORDER BY clause.
@@ -733,15 +732,16 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
        the map keys_with_ordering, as this can cause problems?
 */
 
-void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
+void JOIN_TAB::find_keys_that_can_achieve_ordering()
 {
-  if (!sort_nest_possible)
+  if (!join->sort_nest_possible)
     return;
+
   table->keys_with_ordering.clear_all();
   for (uint index= 0; index < table->s->keys; index++)
   {
     if (table->keys_in_use_for_query.is_set(index) &&
-        test_if_order_by_key(this, order, table, index))
+        test_if_order_by_key(join, join->order, table, index))
       table->keys_with_ordering.set_bit(index);
   }
   /*
@@ -772,13 +772,14 @@ void JOIN::find_keys_that_can_achieve_ordering(TABLE *table)
     FALSE  index present that satisfies the ordering
 */
 
-bool JOIN::needs_filesort(TABLE *table, uint idx, int index_used)
+bool JOIN_TAB::needs_filesort(uint idx, int index_used)
 {
-  if (idx != const_tables)
+  if (idx != join->const_tables)
     return TRUE;
 
-  return !check_if_index_satisfies_ordering(table, index_used);
+  return !check_if_index_satisfies_ordering(index_used);
 }
+
 
 /*
   @brief
@@ -900,7 +901,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab,
     with the access picked first.
     Index scan would not help in comparison with ref access.
   */
-  if (check_if_index_satisfies_ordering(tab->table, index_used))
+  if (tab->check_if_index_satisfies_ordering(index_used))
   {
     if (!table->quick_keys.is_set(static_cast<uint>(index_used)))
     {
@@ -955,20 +956,17 @@ bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
 
 /*
   @brief
-    Check if an index on the first non-const table resolves the ORDER BY clause.
+    Check if an index on a table resolves the ORDER BY clause.
 
   @param
-    table                       First non-const table
     index_used                  index to be checked
 
   @retval
     TRUE  index resolves the ORDER BY clause
     FALSE otherwise
-  TODO varun
-    Maybe move this function to TABLE class
 */
 
-bool check_if_index_satisfies_ordering(TABLE *table, int index_used)
+bool JOIN_TAB::check_if_index_satisfies_ordering(int index_used)
 {
   /*
     index_used is set to
@@ -1121,7 +1119,7 @@ void JOIN::setup_index_use_for_ordering(int index_no)
             (cur_pos->table->quick ? cur_pos->table->quick->index : -1) :
             index_no;
 
-  if (check_if_index_satisfies_ordering(tab->table, index_no))
+  if (tab->check_if_index_satisfies_ordering(index_no))
   {
     if (tab->table->quick_keys.is_set(index_no))
     {
@@ -1168,12 +1166,10 @@ int JOIN_TAB::get_index_on_table()
   return idx;
 }
 
+
 /*
   @brief
     Calculate the selectivity of limit.
-
-  @param
-    cardinality[out]          set the output cardinality of the join
 
   @details
     The selectivity of limit is calculated as
@@ -1185,19 +1181,17 @@ int JOIN_TAB::get_index_on_table()
     sort-nest.
 */
 
-void JOIN::set_fraction_output_for_nest(double *cardinality)
+void JOIN::set_fraction_output_for_nest()
 {
   if (sort_nest_possible && !get_cardinality_estimate)
   {
-    set_if_bigger(join_record_count, 1);
-    *cardinality= join_record_count;
-    fraction_output_for_nest= select_limit < join_record_count ?
-                              select_limit / join_record_count :
+    fraction_output_for_nest= select_limit < cardinality_estimate ?
+                              select_limit / cardinality_estimate :
                               1.0;
     if (unlikely(thd->trace_started()))
     {
       Json_writer_object trace_limit(thd);
-      trace_limit.add("cardinality", join_record_count);
+      trace_limit.add("cardinality", cardinality_estimate);
       trace_limit.add("selectivity_of_limit", fraction_output_for_nest*100);
     }
   }
@@ -1246,6 +1240,7 @@ bool JOIN::sort_nest_allowed()
            select_limit == HA_POS_ERROR ||
            thd->lex->sql_command != SQLCOM_SELECT);
 }
+
 
 /*
   @brief

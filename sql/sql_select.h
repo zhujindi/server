@@ -690,6 +690,9 @@ typedef struct st_join_table {
   bool fix_splitting(SplM_plan_info *spl_plan, table_map remaining_tables,
                      bool is_const_table);
   int get_index_on_table();
+  void find_keys_that_can_achieve_ordering();
+  bool check_if_index_satisfies_ordering(int index_used);
+  bool needs_filesort(uint idx, int index_used);
 } JOIN_TAB;
 
 
@@ -1561,6 +1564,12 @@ public:
   bool get_cardinality_estimate;
 
   /*
+    Set to the estimate of the rows that the join planner expects to be in the
+    output of the join.
+  */
+  double cardinality_estimate;
+
+  /*
     The fraction of records we would read of the sort-nest or the first table
     that satisfies the ORDER BY clause, after the sorting is done.
   */
@@ -1672,6 +1681,7 @@ public:
     sort_nest_possible= FALSE;
     fraction_output_for_nest= 1;
     prefix_resolves_ordering= FALSE;
+    get_cardinality_estimate= FALSE;
   }
 
   /* True if the plan guarantees that it will be returned zero or one row */
@@ -1838,7 +1848,7 @@ public:
 
   bool sort_nest_allowed();
   bool is_order_by_expensive();
-  bool estimate_cardinality(table_map joined_tables);
+  bool estimate_cardinality_for_join(table_map joined_tables);
   bool check_if_sort_nest_present(uint* n_tables, table_map *tables_map);
   bool create_sort_nest_info(uint n_tables, table_map nest_tables_map);
   bool remove_const_from_order_by();
@@ -1849,14 +1859,12 @@ public:
   void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab);
   void extract_condition_for_the_nest();
   void propagate_equal_field_for_orderby();
-  void find_keys_that_can_achieve_ordering(TABLE *table);
   void setup_index_use_for_ordering(int index_no);
   void setup_range_scan(JOIN_TAB *tab, uint idx, double records);
   bool is_join_buffering_allowed(JOIN_TAB *tab);
   bool check_join_prefix_resolves_ordering(table_map previous_tables);
   bool consider_adding_sort_nest(table_map previous_tables);
-  bool needs_filesort(TABLE *table, uint idx, int index_used);
-  void set_fraction_output_for_nest(double *cardinality);
+  void set_fraction_output_for_nest();
   double sort_nest_oper_cost(double join_record_count, uint idx,
                              ulong rec_len);
   bool is_index_with_ordering_allowed(uint idx);
@@ -2209,7 +2217,6 @@ bool mysql_explain_union(THD *thd, SELECT_LEX_UNIT *unit,
 double calculate_record_count_for_sort_nest(JOIN *join, uint n_tables);
 void check_cond_extraction_for_nest(THD *thd, Item *cond,
                                     Pushdown_checker checker, uchar* arg);
-bool check_if_index_satisfies_ordering(TABLE *table, int index_used);
 void resetup_access_for_ordering(JOIN_TAB* tab, int idx);
 int get_best_index_for_order_by_limit(JOIN_TAB *tab,
                                       ha_rows select_limit_arg,
