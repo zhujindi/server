@@ -29110,10 +29110,25 @@ select_handler *SELECT_LEX::find_select_handler(THD *thd)
 }
 
 
+/*
+  @brief
+    Check if the items in the ORDER BY clause are expensive or not.
+
+  @details
+    In this function we walk through the ORDER BY list and check if
+    the elements in the list are expensive to calculate or not.
+    This is done so that we can force computing the join first, store
+    the result in a temporary table and then sort the temporary table.
+
+  @retval
+    TRUE     ORDER BY clause is expensive
+    FALSE    Otherwise
+*/
+
 bool JOIN::is_order_by_expensive()
 {
   /*
-    Force using of tmp table if sorting by a SP or UDF function due to
+    Force using of temp table if sorting by a SP or UDF function due to
     their expensive and probably non-deterministic nature.
   */
   for (ORDER *tmp_order= order; tmp_order ; tmp_order=tmp_order->next)
@@ -29125,52 +29140,6 @@ bool JOIN::is_order_by_expensive()
   return FALSE;
 }
 
-
-/*
-  @brief
-    Re-setup accesses that use index on the first non-const table for ordering
-
-  @param
-    tab                         table whose access needs to be re-setup
-    idx                         index used to access first non-const table
-
-  @details
-    Re-setup the way to access index when the ordering is in DESCENDING order.
-    Also cancel the Index Condition Pushdown for the indexes that need to
-    do the ordering in reverse order.
-*/
-
-void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
-{
-  JOIN *join= tab->join;
-  int direction= test_if_order_by_key(join, join->order, tab->table, idx);
-  if (direction == -1)
-  {
-    if (tab->type == JT_REF || tab->type == JT_EQ_REF)
-    {
-      tab->read_first_record= join_read_last_key;
-      tab->read_record.read_record_func= join_read_prev_same;
-      /*
-        Cancel Pushed Index Condition, as it doesn't work for reverse scans.
-      */
-      if (tab->select && tab->select->pre_idx_push_select_cond)
-      {
-        tab->set_cond(tab->select->pre_idx_push_select_cond);
-         tab->table->file->cancel_pushed_idx_cond();
-      }
-    }
-    else if (tab->type == JT_NEXT)
-      tab->read_first_record= join_read_last;
-    else if (tab->type == JT_ALL && tab->select && tab->select->quick)
-    {
-      if (tab->select && tab->select->pre_idx_push_select_cond)
-      {
-        tab->set_cond(tab->select->pre_idx_push_select_cond);
-         tab->table->file->cancel_pushed_idx_cond();
-      }
-    }
-  }
-}
 
 
 /*

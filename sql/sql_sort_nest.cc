@@ -758,7 +758,6 @@ void JOIN_TAB::find_keys_that_can_achieve_ordering()
     Checks if the given prefix needs Filesort for ordering.
 
   @param
-    table          joined table
     idx            position of the joined table in the partial plan
     index_used     >=0 number of the index that is picked as best access
                    -1  no index access chosen
@@ -1085,7 +1084,7 @@ use_filesort:
     Setup range/index scan to resolve ordering on the first non-const table.
 
   @param
-    index_no        index for which index scan or range scan needs to be setup
+    index        index for which index scan or range scan needs to be setup
 
   @details
     Here we try to prepare range scan or index scan for an index that can be
@@ -1101,7 +1100,7 @@ use_filesort:
       We just store the index in SORT_NEST_INFO::index_used.
 */
 
-void JOIN::setup_index_use_for_ordering(int index_no)
+void JOIN::setup_index_use_for_ordering(int index)
 {
   DBUG_ASSERT(sort_nest_info->index_used == -1);
 
@@ -1112,16 +1111,16 @@ void JOIN::setup_index_use_for_ordering(int index_no)
   if (cur_pos->key)
     return;
 
-  index_no= (index_no == -1) ?
-            (cur_pos->table->quick ? cur_pos->table->quick->index : -1) :
-            index_no;
+  index= (index == -1) ?
+         (cur_pos->table->quick ? cur_pos->table->quick->index : -1) :
+          index;
 
-  if (tab->check_if_index_satisfies_ordering(index_no))
+  if (tab->check_if_index_satisfies_ordering(index))
   {
-    if (tab->table->quick_keys.is_set(index_no))
+    if (tab->table->quick_keys.is_set(index))
     {
       // Range scan
-      setup_range_scan(tab, index_no, cur_pos->records_read);
+      setup_range_scan(tab, index, cur_pos->records_read);
       sort_nest_info->index_used= -1;
     }
     else
@@ -1132,7 +1131,7 @@ void JOIN::setup_index_use_for_ordering(int index_no)
         delete tab->quick;
         tab->quick= NULL;
       }
-      sort_nest_info->index_used= index_no;
+      sort_nest_info->index_used= index;
     }
   }
 }
@@ -1278,11 +1277,7 @@ bool JOIN::consider_adding_sort_nest(table_map prefix_tables)
     Check if indexes on a table are allowed to resolve the ORDER BY clause
 
   @param
-    table                     joined table
     idx                       position of the table in the partial plan
-    index_used                index to be checked
-
-  @details
 
   @retval
     TRUE    Indexes are allowed to resolve ORDER BY clause
@@ -1304,14 +1299,28 @@ bool JOIN::is_index_with_ordering_allowed(uint idx)
           !get_cardinality_estimate;                               // (3)
 }
 
+/*
+  @brief
+    Find the cost to access a table with an index that can resolve ORDER BY.
+
+  @param
+    THD                                  thread structure
+    tab                                  joined table
+    select_limit_arg                     limit for the query
+    fanout                               fanout of the join
+    est_best_records                     estimate of records for best access
+    nr                                   index number
+    index_scan_time[out]                 cost to access the table with the
+                                         the index
+*/
 
 void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
-                                      TABLE *table,
                                       ha_rows *select_limit_arg,
                                       double fanout, double est_best_records,
                                       uint nr, double *index_scan_time,
                                       Json_writer_object *trace_possible_key)
 {
+  TABLE *table= tab->table;
   KEY *keyinfo= table->key_info + nr;
   ha_rows select_limit= *select_limit_arg;
   double rec_per_key;
@@ -1394,4 +1403,51 @@ void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
       *index_scan_time= range_scan_time;
   }
   *select_limit_arg= select_limit;
+}
+
+
+/*
+  @brief
+    Re-setup accesses that use index on the first non-const table for ordering
+
+  @param
+    tab                         table whose access needs to be re-setup
+    idx                         index used to access first non-const table
+
+  @details
+    Re-setup the way to access index when the ordering is in DESCENDING order.
+    Also cancel the Index Condition Pushdown for the indexes that need to
+    do the ordering in reverse order.
+*/
+
+void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
+{
+  JOIN *join= tab->join;
+  int direction= test_if_order_by_key(join, join->order, tab->table, idx);
+  if (direction == -1)
+  {
+    if (tab->type == JT_REF || tab->type == JT_EQ_REF)
+    {
+      tab->read_first_record= join_read_last_key;
+      tab->read_record.read_record_func= join_read_prev_same;
+      /*
+        Cancel Pushed Index Condition, as it doesn't work for reverse scans.
+      */
+      if (tab->select && tab->select->pre_idx_push_select_cond)
+      {
+        tab->set_cond(tab->select->pre_idx_push_select_cond);
+         tab->table->file->cancel_pushed_idx_cond();
+      }
+    }
+    else if (tab->type == JT_NEXT)
+      tab->read_first_record= join_read_last;
+    else if (tab->type == JT_ALL && tab->select && tab->select->quick)
+    {
+      if (tab->select && tab->select->pre_idx_push_select_cond)
+      {
+        tab->set_cond(tab->select->pre_idx_push_select_cond);
+         tab->table->file->cancel_pushed_idx_cond();
+      }
+    }
+  }
 }
