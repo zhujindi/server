@@ -312,7 +312,6 @@ void set_postjoin_aggr_write_func(JOIN_TAB *tab);
 
 Item **get_sargable_cond(JOIN *join, TABLE *table);
 void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
-                                      TABLE *table,
                                       ha_rows *select_limit_arg,
                                       double fanout, double est_best_records,
                                       uint nr, double *index_scan_time,
@@ -28572,7 +28571,7 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
             select_limit= (ha_rows) (select_limit*rec_per_key);
         } /* group */
 
-        find_cost_of_index_with_ordering(thd, tab, table, &select_limit,
+        find_cost_of_index_with_ordering(thd, tab, &select_limit,
                                          fanout, refkey_rows_estimate,
                                          nr, &index_scan_time,
                                          &possible_key);
@@ -29204,6 +29203,53 @@ bool JOIN::estimate_cardinality_for_join(table_map joined_tables)
     best_ref[i]= save_best_ref[i];
 
   return FALSE;
+}
+
+
+/*
+  @brief
+    Re-setup accesses that use index on the first non-const table for ordering
+
+  @param
+    tab                         table whose access needs to be re-setup
+    idx                         index used to access first non-const table
+
+  @details
+    Re-setup the way to access index when the ordering is in DESCENDING order.
+    Also cancel the Index Condition Pushdown for the indexes that need to
+    do the ordering in reverse order.
+*/
+
+void resetup_access_for_ordering(JOIN_TAB* tab, int idx)
+{
+  JOIN *join= tab->join;
+  int direction= test_if_order_by_key(join, join->order, tab->table, idx);
+  if (direction == -1)
+  {
+    if (tab->type == JT_REF || tab->type == JT_EQ_REF)
+    {
+      tab->read_first_record= join_read_last_key;
+      tab->read_record.read_record_func= join_read_prev_same;
+      /*
+        Cancel Pushed Index Condition, as it doesn't work for reverse scans.
+      */
+      if (tab->select && tab->select->pre_idx_push_select_cond)
+      {
+        tab->set_cond(tab->select->pre_idx_push_select_cond);
+         tab->table->file->cancel_pushed_idx_cond();
+      }
+    }
+    else if (tab->type == JT_NEXT)
+      tab->read_first_record= join_read_last;
+    else if (tab->type == JT_ALL && tab->select && tab->select->quick)
+    {
+      if (tab->select && tab->select->pre_idx_push_select_cond)
+      {
+        tab->set_cond(tab->select->pre_idx_push_select_cond);
+         tab->table->file->cancel_pushed_idx_cond();
+      }
+    }
+  }
 }
 
 
