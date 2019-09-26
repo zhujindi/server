@@ -434,6 +434,9 @@ bool JOIN::check_join_prefix_resolves_ordering(table_map previous_tables)
 bool JOIN::check_if_sort_nest_present(uint* n_tables,
                                       table_map *nest_tables_map)
 {
+  if (!sort_nest_possible)
+    return FALSE;
+
   uint tablenr;
   table_map nest_tables= 0;
   uint tables= 0;
@@ -445,7 +448,7 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables,
         pos->sj_strategy == SJ_OPT_MATERIALIZE_SCAN)
     {
       SJ_MATERIALIZATION_INFO *sjm= pos->table->emb_sj_nest->sj_mat_info;
-      for (uint j= 1; j < sjm->tables; j++)
+      for (uint j= 0; j < sjm->tables; j++)
       {
         JOIN_TAB *tab= (pos+j)->table;
         nest_tables|= tab->table->map;

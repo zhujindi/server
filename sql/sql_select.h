@@ -1820,6 +1820,7 @@ public:
     and one of the following conditions holds:
     - We are using DISTINCT (simple distinct's are already optimized away)
     - We are using an ORDER BY or GROUP BY on fields not in the first table
+    - We are not using the sort nest for ORDER BY with LIMIT
     - We are using different ORDER BY and GROUP BY orders
     - The user wants us to buffer the result.
     When the WITH ROLLUP modifier is present, we cannot skip temporary table
