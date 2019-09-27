@@ -5324,18 +5324,19 @@ make_join_statistics(JOIN *join, List<TABLE_LIST> &tables_list,
     }
   }
 
-  if (join->sort_nest_allowed() && !join->is_order_by_expensive())
-    join->sort_nest_possible= TRUE;
-
-  join->propagate_equal_field_for_orderby();
   /*
     Here a call is made to remove the constant from the order by clause,
-    this call would only remove the basic constants. This is done for
-    the ORDER BY LIMIT optimization.
+    this call would only remove the basic constants. This is done primarily
+    for the ORDER BY LIMIT optimization with the sort-nest.
   */
 
   if (join->remove_const_from_order_by())
     DBUG_RETURN(TRUE);
+
+  if (join->sort_nest_allowed() && !join->is_order_by_expensive())
+    join->sort_nest_possible= TRUE;
+
+  join->propagate_equal_field_for_orderby();
 
   /* Calc how many (possible) matched records in each table */
 
