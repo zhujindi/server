@@ -1764,3 +1764,360 @@ a	b	b	a
 1	1	1	1
 0	0	0	0
 drop table t0,t1,t2,t3;
+#
+# Constant removed from ORDER BY , so no need of sorting
+#
+CREATE TABLE t0 (a int);
+INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
+CREATE TABLE t1 (a int, b int);
+INSERT INTO t1 SELECT a, a from t0;
+CREATE TABLE t2 as SELECT * from t1;
+set use_sort_nest=1;
+EXPLAIN SELECT *
+FROM t1,t2
+WHERE t1.a=t2.a and t1.b= 4 
+ORDER BY t1.b DESC
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	NULL	NULL	NULL	NULL	10	Using where
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	10	Using where
+SELECT *
+FROM t1,t2
+WHERE t1.a=t2.a and t1.b= 4 
+ORDER BY t1.b DESC
+LIMIT 5;
+a	b	a	b
+4	4	4	4
+drop table t0,t1,t2;
+#
+# ORDER BY clause containing expressions
+#
+CREATE TABLE t0 (a int);
+INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
+CREATE TABLE t1 (a int, b int);
+INSERT INTO t1 SELECT a, a from t0 where a <5;
+CREATE TABLE t2 as SELECT * from t1 where a < 5;
+CREATE TABLE t3(a int, b int, c int, key(a));
+INSERT INTO t3  SELECT seq-1, seq-1, seq-1 from seq_1_to_10;
+ANALYZE TABLE t1 PERSISTENT FOR ALL;
+ANALYZE TABLE t2 PERSISTENT FOR ALL;
+ANALYZE TABLE t3 PERSISTENT FOR ALL;
+set use_sort_nest=1;
+EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY abs(t3.a+t1.b) DESC
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	NULL	NULL	NULL	NULL	5	
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	5	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	<sort-nest>	ALL	NULL	NULL	NULL	NULL	5	Using filesort
+1	SIMPLE	t3	ref	a	a	5	sort-nest.a	1	Using index
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY abs(t3.a+t1.b) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+set use_sort_nest=0;
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY abs(t3.a+t1.b) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+#
+# No sort nest where ORDER BY item are expensive to compute like 
+# stored functions, subqueries etc
+CREATE FUNCTION f1(a INT) RETURNS INT
+BEGIN
+RETURN a;
+END|
+set use_sort_nest=1;
+EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY f1(t3.a+t1.b) DESC
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	NULL	NULL	NULL	NULL	5	Using temporary; Using filesort
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	5	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	t3	ref	a	a	5	test.t2.a	1	Using index
+EXPLAIN FORMAT=JSON SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY f1(t3.a+t1.b) DESC
+LIMIT 5;
+EXPLAIN
+{
+  "query_block": {
+    "select_id": 1,
+    "filesort": {
+      "sort_key": "f1(t3.a + t1.b) desc",
+      "temporary_table": {
+        "table": {
+          "table_name": "t1",
+          "access_type": "ALL",
+          "rows": 5,
+          "filtered": 100
+        },
+        "block-nl-join": {
+          "table": {
+            "table_name": "t2",
+            "access_type": "ALL",
+            "rows": 5,
+            "filtered": 100
+          },
+          "buffer_type": "flat",
+          "buffer_size": "119",
+          "join_type": "BNL",
+          "attached_condition": "t2.b = t1.a and t2.a is not null"
+        },
+        "table": {
+          "table_name": "t3",
+          "access_type": "ref",
+          "possible_keys": ["a"],
+          "key": "a",
+          "key_length": "5",
+          "used_key_parts": ["a"],
+          "ref": ["test.t2.a"],
+          "rows": 1,
+          "filtered": 100,
+          "using_index": true
+        }
+      }
+    }
+  }
+}
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY f1(t3.a+t1.b) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+set use_sort_nest=0;
+EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY f1(t3.a+t1.b) DESC
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	NULL	NULL	NULL	NULL	5	Using temporary; Using filesort
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	5	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	t3	ref	a	a	5	test.t2.a	1	Using index
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY f1(t3.a+t1.b) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+drop function f1;
+#
+# Window function in order by clause, sort-nest not allowed
+#
+set use_sort_nest=1;
+EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b AND t2.a=t3.a
+ORDER BY row_number() OVER (ORDER BY t1.a) DESC
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	SIMPLE	t1	ALL	NULL	NULL	NULL	NULL	5	Using temporary; Using filesort
+1	SIMPLE	t2	ALL	NULL	NULL	NULL	NULL	5	Using where; Using join buffer (flat, BNL join)
+1	SIMPLE	t3	ref	a	a	5	test.t2.a	1	Using index
+EXPLAIN FORMAT=JSON SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b AND t2.a=t3.a
+ORDER BY row_number() OVER (ORDER BY t1.a) DESC
+LIMIT 5;
+EXPLAIN
+{
+  "query_block": {
+    "select_id": 1,
+    "filesort": {
+      "sort_key": "row_number() over ( order by t1.a) desc",
+      "window_functions_computation": {
+        "sorts": {
+          "filesort": {
+            "sort_key": "t1.a"
+          }
+        },
+        "temporary_table": {
+          "table": {
+            "table_name": "t1",
+            "access_type": "ALL",
+            "rows": 5,
+            "filtered": 100
+          },
+          "block-nl-join": {
+            "table": {
+              "table_name": "t2",
+              "access_type": "ALL",
+              "rows": 5,
+              "filtered": 100
+            },
+            "buffer_type": "flat",
+            "buffer_size": "119",
+            "join_type": "BNL",
+            "attached_condition": "t2.b = t1.a and t2.a is not null"
+          },
+          "table": {
+            "table_name": "t3",
+            "access_type": "ref",
+            "possible_keys": ["a"],
+            "key": "a",
+            "key_length": "5",
+            "used_key_parts": ["a"],
+            "ref": ["test.t2.a"],
+            "rows": 1,
+            "filtered": 100,
+            "using_index": true
+          }
+        }
+      }
+    }
+  }
+}
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b AND t2.a=t3.a
+ORDER BY row_number() OVER (ORDER BY t1.a) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+set use_sort_nest=0;
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b AND t2.a=t3.a
+ORDER BY row_number() OVER (ORDER BY t1.a) DESC
+LIMIT 5;
+a	b	b	t1.b + t2.b
+4	4	4	8
+3	3	3	6
+2	2	2	4
+1	1	1	2
+0	0	0	0
+#
+# Subqueries used in order by clause
+#
+set use_sort_nest=1;
+EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY (select A.a+t1.b from t1 A limit 1)
+LIMIT 5;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	5	Using temporary; Using filesort
+1	PRIMARY	t2	ALL	NULL	NULL	NULL	NULL	5	Using where; Using join buffer (flat, BNL join)
+1	PRIMARY	t3	ref	a	a	5	test.t2.a	1	Using index
+2	DEPENDENT SUBQUERY	A	ALL	NULL	NULL	NULL	NULL	5	
+EXPLAIN FORMAT=JSON SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY (select A.a+t1.b from t1 A limit 1)
+LIMIT 5;
+EXPLAIN
+{
+  "query_block": {
+    "select_id": 1,
+    "filesort": {
+      "sort_key": "(subquery#2)",
+      "temporary_table": {
+        "table": {
+          "table_name": "t1",
+          "access_type": "ALL",
+          "rows": 5,
+          "filtered": 100
+        },
+        "block-nl-join": {
+          "table": {
+            "table_name": "t2",
+            "access_type": "ALL",
+            "rows": 5,
+            "filtered": 100
+          },
+          "buffer_type": "flat",
+          "buffer_size": "119",
+          "join_type": "BNL",
+          "attached_condition": "t2.b = t1.a and t2.a is not null"
+        },
+        "table": {
+          "table_name": "t3",
+          "access_type": "ref",
+          "possible_keys": ["a"],
+          "key": "a",
+          "key_length": "5",
+          "used_key_parts": ["a"],
+          "ref": ["test.t2.a"],
+          "rows": 1,
+          "filtered": 100,
+          "using_index": true
+        },
+        "subqueries": [
+          {
+            "expression_cache": {
+              "state": "uninitialized",
+              "query_block": {
+                "select_id": 2,
+                "table": {
+                  "table_name": "A",
+                  "access_type": "ALL",
+                  "rows": 5,
+                  "filtered": 100
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY (select A.a+t1.b from t1 A limit 1)
+LIMIT 5;
+a	b	b	t1.b + t2.b
+0	0	0	0
+1	1	1	2
+2	2	2	4
+3	3	3	6
+4	4	4	8
+set use_sort_nest=0;
+SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+FROM t1,t2, t3
+WHERE t1.a=t2.b and t2.a=t3.a
+ORDER BY (select A.a+t1.b from t1 A limit 1)
+LIMIT 5;
+a	b	b	t1.b + t2.b
+0	0	0	0
+1	1	1	2
+2	2	2	4
+3	3	3	6
+4	4	4	8
+drop table t0,t1,t2,t3;

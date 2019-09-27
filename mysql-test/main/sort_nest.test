@@ -545,3 +545,126 @@ eval EXPLAIN $query;
 eval $query;
 
 drop table t0,t1,t2,t3;
+
+
+--echo #
+--echo # Constant removed from ORDER BY , so no need of sorting
+--echo #
+
+CREATE TABLE t0 (a int);
+INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
+CREATE TABLE t1 (a int, b int);
+INSERT INTO t1 SELECT a, a from t0;
+CREATE TABLE t2 as SELECT * from t1;
+
+let $query= SELECT *
+            FROM t1,t2
+            WHERE t1.a=t2.a and t1.b= 4 
+            ORDER BY t1.b DESC
+            LIMIT 5;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval $query;
+
+drop table t0,t1,t2;
+
+--echo #
+--echo # ORDER BY clause containing expressions
+--echo #
+
+CREATE TABLE t0 (a int);
+INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
+CREATE TABLE t1 (a int, b int);
+INSERT INTO t1 SELECT a, a from t0 where a <5;
+CREATE TABLE t2 as SELECT * from t1 where a < 5;
+CREATE TABLE t3(a int, b int, c int, key(a));
+INSERT INTO t3  SELECT seq-1, seq-1, seq-1 from seq_1_to_10;
+
+--disable_result_log
+ANALYZE TABLE t1 PERSISTENT FOR ALL;
+ANALYZE TABLE t2 PERSISTENT FOR ALL;
+ANALYZE TABLE t3 PERSISTENT FOR ALL;
+--enable_result_log
+
+
+let $query= SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+            FROM t1,t2, t3
+            WHERE t1.a=t2.b and t2.a=t3.a
+            ORDER BY abs(t3.a+t1.b) DESC
+            LIMIT 5;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval $query;
+
+set use_sort_nest=0;
+eval $query;
+
+--echo #
+--echo # No sort nest where ORDER BY item are expensive to compute like 
+--echo # stored functions, subqueries etc
+
+delimiter |;
+
+CREATE FUNCTION f1(a INT) RETURNS INT
+BEGIN
+  RETURN a;
+END|
+
+delimiter ;|
+
+let $query= SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+            FROM t1,t2, t3
+            WHERE t1.a=t2.b and t2.a=t3.a
+            ORDER BY f1(t3.a+t1.b) DESC
+            LIMIT 5;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval EXPLAIN FORMAT=JSON $query;
+eval $query;
+
+set use_sort_nest=0;
+eval EXPLAIN $query;
+eval $query;
+
+drop function f1;
+
+--echo #
+--echo # Window function in order by clause, sort-nest not allowed
+--echo #
+
+let $query= SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+            FROM t1,t2, t3
+            WHERE t1.a=t2.b AND t2.a=t3.a
+            ORDER BY row_number() OVER (ORDER BY t1.a) DESC
+            LIMIT 5;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval EXPLAIN FORMAT=JSON $query;
+eval $query;
+
+set use_sort_nest=0;
+eval $query;
+
+--echo #
+--echo # Subqueries used in order by clause
+--echo #
+
+let $query= SELECT t1.a, t2.b, t1.b, t1.b + t2.b
+            FROM t1,t2, t3
+            WHERE t1.a=t2.b and t2.a=t3.a
+            ORDER BY (select A.a+t1.b from t1 A limit 1)
+            LIMIT 5;
+
+set use_sort_nest=1;
+eval EXPLAIN $query;
+eval EXPLAIN FORMAT=JSON $query;
+eval $query;
+
+set use_sort_nest=0;
+eval $query;
+
+drop table t0,t1,t2,t3;
