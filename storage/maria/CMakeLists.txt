@@ -104,6 +104,38 @@ OPTION(USE_ARIA_FOR_TMP_TABLES "Use Aria for temporary tables" ON)
 # S3
 #
 INCLUDE (CheckIncludeFiles)
+INCLUDE (CheckCSourceRuns)
+
+SET(CURL_SSL_TEST_SOURCE "\n
+   #include <curl/curl.h>\n
+   #include <stdlib.h>\n
+   #include <string.h>\n
+   int main(void)\n
+   {\n
+     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);\n
+\n
+     if (data->ssl_version)\n
+     {\n
+       if (strncmp(data->ssl_version, \"OpenSSL\", 7) != 0)\n
+       {\n
+         return EXIT_FAILURE;\n
+       }\n
+       if (data->ssl_version[8] == '0')\n
+       {\n
+         return EXIT_SUCCESS;\n
+       }\n
+       if ((data->ssl_version[8] == '1') && (data->ssl_version[10] == '0'))\n
+       {\n
+         return EXIT_SUCCESS;\n
+       }\n
+       return EXIT_FAILURE;\n
+     }\n
+     else\n
+     {\n
+       return EXIT_FAILURE;\n
+     }\n
+     return EXIT_SUCCESS;\n
+   }")
 
 SET(S3_SOURCES ha_s3.cc s3_func.c
     libmarias3/src/debug.c libmarias3/src/error.c libmarias3/src/marias3.c
@@ -122,11 +154,20 @@ IF (LIBXML2_FOUND AND CURL_FOUND)
 ENDIF()
 
 IF(TARGET s3)
+  SET(CMAKE_REQUIRED_LIBRARIES curl)
+  CHECK_C_SOURCE_RUNS("${CURL_SSL_TEST_SOURCE}" FOUND_UNSAFE_CURL_OPENSSL)
+  UNSET(CMAKE_REQUIRED_LIBRARIES)
   MYSQL_ADD_EXECUTABLE(aria_s3_copy aria_s3_copy.cc COMPONENT Server)
   TARGET_LINK_LIBRARIES(aria_s3_copy s3)
 
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/libmarias3 ${LIBXML2_INCLUDE_DIR})
   ADD_DEFINITIONS(-DWITH_S3_STORAGE_ENGINE)
+  IF (FOUND_UNSAFE_CURL_OPENSSL)
+      MESSAGE(STATUS "Found thread unsafe curl openssl, locks added")
+      ADD_DEFINITIONS(-DHAVE_CURL_OPENSSL_UNSAFE)
+  ELSE ()
+      MESSAGE(STATUS "Found thread safe curl openssl")
+  ENDIF ()
 
   TARGET_LINK_LIBRARIES(aria s3)
 ENDIF()
