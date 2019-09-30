@@ -6178,13 +6178,12 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
 
 Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
 {
-  JOIN *join= (JOIN*)arg;
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  if (!(used_tables() & sort_nest_info->nest_tables_map) &&
+  Mat_nest_info *nest_info= (Mat_nest_info*)arg;
+  if (!(used_tables() & nest_info->nest_tables_map) &&
       !(used_tables() & OUTER_REF_TABLE_BIT))
     return this;
 
-  List_iterator_fast<Item> li(sort_nest_info->nest_base_table_cols);
+  List_iterator_fast<Item> li(nest_info->nest_base_table_cols);
   uint index= 0;
   Item *item;
   while((item= li++))
@@ -6195,11 +6194,11 @@ Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
       if (used_tables() == OUTER_REF_TABLE_BIT)
       {
         Item_field *clone_item= new (thd->mem_root) Item_field(thd, this);
-        Item *nest_item= sort_nest_info->nest_temp_table_cols.elem(index);
+        Item *nest_item= nest_info->nest_temp_table_cols.elem(index);
         clone_item->set_field(((Item_field*)nest_item)->field);
         return clone_item;
       }
-      return sort_nest_info->nest_temp_table_cols.elem(index);
+      return nest_info->nest_temp_table_cols.elem(index);
     }
     index++;
   }

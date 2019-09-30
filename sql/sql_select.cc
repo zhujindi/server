@@ -2506,9 +2506,10 @@ int JOIN::optimize_stage2()
 
   if (sort_nest_needed())
   {
-    if (make_sort_nest())
+    if (make_sort_nest(sort_nest_info))
       DBUG_RETURN(1);
-    substitute_base_with_nest_field_items();
+    substitute_best_fields_for_order_by_items();
+    substitute_base_with_nest_field_items(sort_nest_info);
   }
 
   if (make_join_select(this, select, conds))

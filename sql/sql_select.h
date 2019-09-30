@@ -1852,12 +1852,14 @@ public:
   bool check_if_sort_nest_present(uint* n_tables, table_map *tables_map);
   bool create_sort_nest_info(uint n_tables, table_map nest_tables_map);
   bool remove_const_from_order_by();
-  bool make_sort_nest();
+  bool make_sort_nest(Mat_nest_info *nest_info);
   double calculate_record_count_for_sort_nest(uint n_tables);
-  void substitute_base_with_nest_field_items();
-  void substitute_ref_items(JOIN_TAB *tab);
-  void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab);
-  void extract_condition_for_the_nest();
+  void substitute_base_with_nest_field_items(Mat_nest_info* nest_info);
+  void substitute_best_fields_for_order_by_items();
+  void substitute_ref_items(JOIN_TAB *tab, Mat_nest_info* nest_info);
+  void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
+                                    Mat_nest_info* nest_info);
+  void extract_condition_for_the_nest(Mat_nest_info* nest_info);
   void propagate_equal_field_for_orderby();
   void setup_index_use_for_ordering(int index_no);
   void setup_range_scan(JOIN_TAB *tab, uint idx, double records);

@@ -6061,14 +6061,25 @@ public:
   Copy_field *copy_field; /* Needed for SJ_Materialization scan */
 };
 
-
 /*
-  Optimizer and executor structure for the materialized sort-nest. This
-  structure contains all the information required to use the sort-nest.
+  Optimizer and executor structure for the materialized nest. This
+  structure contains all the information required to use the
+  materialized nest.
 */
-class SORT_NEST_INFO : public Sql_alloc
+
+class Mat_nest_info :public Sql_alloc
 {
 public:
+  Mat_nest_info(uint tables, table_map tables_map)
+  {
+    table= NULL;
+    nest_tab= NULL;
+    n_tables= tables;
+    materialized= FALSE;
+    nest_tables_map= tables_map;
+    nest_cond= NULL;
+  }
+
   TMP_TABLE_PARAM tmp_table_param;
   List<Item> nest_base_table_cols;
   List<Item> nest_temp_table_cols;
@@ -6078,6 +6089,20 @@ public:
   bool materialized; /* TRUE <=> materialization already performed */
   table_map nest_tables_map;
   Item *nest_cond;
+};
+
+/*
+  A derived class for the sort-nest.
+*/
+
+class SORT_NEST_INFO : public Mat_nest_info
+{
+public:
+  SORT_NEST_INFO(uint tables, table_map tables_map)
+                :Mat_nest_info(tables, tables_map)
+  {
+    index_used= -1;
+  }
   /*
     >=0 set to the index that satisfies the ORDER BY clause and does an index
         scan on the first non-const table.

@@ -646,14 +646,13 @@ void add_table_scan_values_to_trace(THD *thd, JOIN_TAB *tab)
   Add the tables that are inside the sort-nest
   in the optimizer trace
 */
-void add_sort_nest_tables_to_trace(JOIN *join)
+void add_sort_nest_tables_to_trace(JOIN *join, Mat_nest_info* nest_info)
 {
   JOIN_TAB *end_tab, *tab;
   THD *thd= join->thd;
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
-  end_tab= sort_nest_info->nest_tab;
+  end_tab= nest_info->nest_tab;
   Json_writer_object trace_wrapper(thd);
-  Json_writer_array sort_nest(thd, "sort_nest");
+  Json_writer_array sort_nest(thd, "sort-nest");
   for (tab= join->join_tab + join->const_tables; tab < end_tab; tab++)
     sort_nest.add_table_name(tab);
 }
