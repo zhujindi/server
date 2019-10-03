@@ -210,6 +210,7 @@ bool get_range_limit_read_cost(const JOIN_TAB *tab, const TABLE *table,
                                ha_rows rows_limit, double *read_time);
 Item **get_sargable_cond(JOIN *join, TABLE *table);
 void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
                                       ha_rows *select_limit_arg,
                                       double fanout, double est_best_records,
                                       uint nr, double *index_scan_time,
@@ -476,7 +477,8 @@ void JOIN::extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info)
     all the predicates that cannot be added to the inner tables of the nest.
   */
   table_map nest_tables_map= nest_info->get_tables_map();
-  conds->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
+  conds->check_pushable_cond_extraction(
+                                       &Item::pushable_cond_checker_for_tables,
                                         (uchar*)&nest_tables_map);
 
   /*
@@ -741,10 +743,10 @@ bool JOIN::make_sort_nest(Mat_join_tab_nest_info *nest_info)
     set for them.
 
     TODO varun:
-    An improvement would be if to remove the fields from this
-    list that are completely internal to the nest because such
-    fields would not be used in computing expression in the post
-    ORDER BY context
+      An improvement would be if to remove the fields from this
+      list that are completely internal to the nest because such
+      fields would not be used in computing expression in the post
+      ORDER BY context
   */
 
   for (j= join_tab + const_tables; j < nest_info->nest_tab; j++)
@@ -873,6 +875,8 @@ double JOIN::sort_nest_oper_cost(double join_record_count, uint idx,
     should we apply the limit here as we would read only
     join_record_count * selectivity_of_limit records
   */
+  double records= 1.0;
+  set_if_bigger(records, join_record_count * fraction_output_for_nest);
   cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) *
          join_record_count;   // cost to perform post join operation used here
   cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) +
@@ -927,10 +931,6 @@ double JOIN::calculate_record_count_for_sort_nest(uint n_tables)
   @details
     This function sets the flag TABLE::keys_with_ordering with all the
     indexes of a table that can resolve the ORDER BY clause.
-
-  TODO varun:
-    1) create a map for the the keys that can be used for order by, don't use
-       the map keys_with_ordering, as this can cause problems?
 */
 
 void JOIN_TAB::find_keys_that_can_achieve_ordering()
@@ -945,11 +945,6 @@ void JOIN_TAB::find_keys_that_can_achieve_ordering()
         test_if_order_by_key(join, join->order, table, index))
       table->keys_with_ordering.set_bit(index);
   }
-  /*
-    TODO varun:
-    Is this really required, I think a hint can be given as to which index to
-    use for ordering, if this is TRUE add a test case for this
-  */
   table->keys_with_ordering.intersect(table->keys_in_use_for_order_by);
 }
 
@@ -1013,12 +1008,6 @@ bool JOIN_TAB::needs_filesort(uint idx, int index_used)
   @retval
     -1     no cheaper index found for ordering
     >=0    cheaper index found for ordering
-
-  TODO varun:
-    1) Mention that limit is picked from the join structure
-    2) This needs a detailed explanation, also mention it is picked from
-       test_if_cheaper_ordering
-    3) Maybe we can re-factor the code with test_if_cheaper_ordering.
 */
 
 int get_best_index_for_order_by_limit(JOIN_TAB *tab,
@@ -1067,7 +1056,7 @@ int get_best_index_for_order_by_limit(JOIN_TAB *tab,
     Json_writer_object possible_key(thd);
     double index_scan_time;
     possible_key.add("index", table->key_info[idx].name);
-    find_cost_of_index_with_ordering(thd, tab, &select_limit,
+    find_cost_of_index_with_ordering(thd, tab, table, &select_limit,
                                      fanout, est_records,
                                      idx, &index_scan_time,
                                      &possible_key);
@@ -1345,9 +1334,6 @@ void JOIN::setup_index_use_for_ordering(int index)
   @retval
     >=0 index used to access the table
     -1  no index used to access table, probably table scan is done
-
-  TODO varun:
-    -consider hash join also.
 */
 
 int JOIN_TAB::get_index_on_table()
@@ -1506,7 +1492,8 @@ bool JOIN::is_index_with_ordering_allowed(uint idx)
 
   @param
     THD                                  thread structure
-    tab                                  joined table
+    tab                                  join_tab structure for joined table
+    table                                first non-const table
     select_limit_arg                     limit for the query
     fanout                               fanout of the join
     est_best_records                     estimate of records for best access
@@ -1516,12 +1503,12 @@ bool JOIN::is_index_with_ordering_allowed(uint idx)
 */
 
 void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
                                       ha_rows *select_limit_arg,
                                       double fanout, double est_best_records,
                                       uint nr, double *index_scan_time,
                                       Json_writer_object *trace_possible_key)
 {
-  TABLE *table= tab->table;
   KEY *keyinfo= table->key_info + nr;
   ha_rows select_limit= *select_limit_arg;
   double rec_per_key;

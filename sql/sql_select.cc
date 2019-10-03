@@ -312,6 +312,7 @@ void set_postjoin_aggr_write_func(JOIN_TAB *tab);
 
 Item **get_sargable_cond(JOIN *join, TABLE *table);
 void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
+                                      TABLE *table,
                                       ha_rows *select_limit_arg,
                                       double fanout, double est_best_records,
                                       uint nr, double *index_scan_time,
@@ -9720,10 +9721,7 @@ best_extension_by_limited_search(JOIN      *join,
       {
         /* Recursively expand the current partial plan */
         swap_variables(JOIN_TAB*, join->best_ref[idx], *pos);
-        /*
-          TODO varun:
-            Lets try to move this to a function
-        */
+
         if (join->is_index_with_ordering_allowed(idx) &&
             s->check_if_index_satisfies_ordering(index_used))
           limit_applied_to_nest= TRUE;
@@ -9797,11 +9795,6 @@ best_extension_by_limited_search(JOIN      *join,
               join->positions[join->const_tables].table->table) ||
               join->sort_nest_possible))
         {
-          /*
-             We may have to make a temp table, note that this is only a
-             heuristic since we cannot know for sure at this point.
-             Hence it may be wrong.
-          */
           double cost;
           if (join->sort_nest_possible)
           {
@@ -9811,7 +9804,14 @@ best_extension_by_limited_search(JOIN      *join,
             trace_one_table.add("cost_of_sorting", cost);
           }
           else
+          {
+            /*
+              We may have to make a temp table, note that this is only a
+              heuristic since we cannot know for sure at this point.
+              Hence it may be wrong.
+            */
             cost= current_record_count;
+          }
 
           current_read_time= COST_ADD(current_read_time, cost);
         }
@@ -10074,7 +10074,8 @@ cache_record_length(JOIN *join,uint idx)
 
 
 /*
-  TODO varun: Add comments here
+  @brief
+    Get an estimate of record length for a materialized nest.
 */
 
 static ulong
@@ -28573,7 +28574,7 @@ test_if_cheaper_ordering(const JOIN_TAB *tab, ORDER *order, TABLE *table,
             select_limit= (ha_rows) (select_limit*rec_per_key);
         } /* group */
 
-        find_cost_of_index_with_ordering(thd, tab, &select_limit,
+        find_cost_of_index_with_ordering(thd, tab, table, &select_limit,
                                          fanout, refkey_rows_estimate,
                                          nr, &index_scan_time,
                                          &possible_key);

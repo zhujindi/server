@@ -1630,10 +1630,9 @@ public:
   */
   bool is_orig_degenerated;
 
-  /* TODO varun: see if this needs a better comment than this
-
-    NOT NULL  sort-nest present
-    NULL      sort-nest not present
+  /*
+    NOT NULL  sort nest present
+    NULL      Otherwise
   */
   Sort_nest_info *sort_nest_info;
 

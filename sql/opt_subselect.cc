@@ -3896,8 +3896,12 @@ bool setup_sj_materialization_part1(JOIN_TAB *sjm_tab)
   DBUG_ENTER("setup_sj_materialization");
   
   /*
-    Walk out of outer join nests until we reach the semi-join nest we're in
-    TODO varun: add a comment
+    Walk out of outer join nests until we reach the semi-join nest we're in.
+    There can be a case that the first [in join order ordering] table
+    inside semi-join-materialization nest is also an inner table wrt an
+    outer join (that is embedded in the semi-join).
+    This can happen when all of the tables that are inside the semi-join
+    but not inside the outer join are constant
   */
   while (!emb_sj_nest->sj_mat_info)
     emb_sj_nest= emb_sj_nest->embedding;

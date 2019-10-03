@@ -236,15 +236,6 @@ public:
   bool walk(Item_processor processor, bool walk_subquery, void *arg);
   Item* transform(THD *thd, Item_transformer transformer,
                   bool transform_subquery, uchar *arg);
-  /*
-    TODO varun: need to check this, is this needed for the case for derived
-    tables.
-  bool excl_dep_on_nest(table_map tab_map)
-  {
-    if (const_item() || !(used_tables() & ~tab_map))
-      return TRUE;
-    return FALSE;
-  }*/
 
   bool mark_as_eliminated_processor(void *arg);
   bool eliminate_subselect_processor(void *arg);
