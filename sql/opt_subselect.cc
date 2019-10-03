@@ -4939,7 +4939,7 @@ int setup_semijoin_dups_elimination(JOIN *join, ulonglong options,
   SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
 
   if (sort_nest_info)
-    no_jbuf_after= join->const_tables+ sort_nest_info->n_tables;
+    no_jbuf_after= join->const_tables+ sort_nest_info->number_of_tables();
 
   POSITION *pos= join->best_positions + join->const_tables;
   for (i= join->const_tables ; i < join->top_join_tab_count; )
@@ -5554,7 +5554,7 @@ enum_nested_loop_state join_tab_execution_startup(JOIN_TAB *tab)
     JOIN *join= tab->join;
     SORT_NEST_INFO *nest_info= join->sort_nest_info;
 
-    if (!nest_info->materialized)
+    if (!nest_info->is_materialized())
     {
       JOIN_TAB *join_tab= join->join_tab + join->const_tables;
       JOIN_TAB *save_return_tab= join->return_tab;
@@ -5565,7 +5565,7 @@ enum_nested_loop_state join_tab_execution_startup(JOIN_TAB *tab)
         DBUG_RETURN(rc);
       }
       join->return_tab= save_return_tab;
-      nest_info->materialized= TRUE;
+      nest_info->set_materialized();
     }
   }
 

@@ -83,7 +83,8 @@ void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
       - REF access items
 */
 
-void JOIN::substitute_base_with_nest_field_items(Mat_nest_info* nest_info)
+void JOIN::substitute_base_with_nest_field_items(Mat_join_tab_nest_info
+                                                 *nest_info)
 {
   List_iterator<Item> it(fields_list);
   Item *item, *new_item;
@@ -113,7 +114,7 @@ void JOIN::substitute_base_with_nest_field_items(Mat_nest_info* nest_info)
 
   JOIN_TAB *end_tab= nest_info->nest_tab;
   uint i, j;
-  for (i= const_tables + nest_info->n_tables, j=0;
+  for (i= const_tables + nest_info->number_of_tables(), j=0;
        i < top_join_tab_count; i++, j++)
   {
     JOIN_TAB *tab= end_tab + j;
@@ -162,7 +163,8 @@ void JOIN::substitute_base_with_nest_field_items(Mat_nest_info* nest_info)
 
 */
 
-void JOIN::substitute_ref_items(JOIN_TAB *tab, Mat_nest_info* nest_info)
+void JOIN::substitute_ref_items(JOIN_TAB *tab,
+                                Mat_join_tab_nest_info* nest_info)
 {
   Item *item;
   /* Substituting REF field items with sort-nest's field items */
@@ -216,7 +218,7 @@ void JOIN::substitute_ref_items(JOIN_TAB *tab, Mat_nest_info* nest_info)
 */
 
 void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
-                                        Mat_nest_info* nest_info)
+                                        Mat_join_tab_nest_info* nest_info)
 {
   JOIN_TAB *tab= sjm_tab->bush_children->start;
   TABLE_LIST *emb_sj_nest= tab->table->pos_in_table_list->embedding;
@@ -274,7 +276,7 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
 
 */
 
-void JOIN::extract_condition_for_the_nest(Mat_nest_info* nest_info)
+void JOIN::extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info)
 {
   DBUG_ASSERT(nest_info);
   Item *orig_cond= conds;
@@ -287,8 +289,9 @@ void JOIN::extract_condition_for_the_nest(Mat_nest_info* nest_info)
       -change name to check_pushable_cond_extraction
       -please use 2 functions here, not use a structure, looks complex
   */
+  table_map nest_tables_map= nest_info->get_tables_map();
   orig_cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
-                                           (uchar*)&nest_info->nest_tables_map);
+                                           (uchar*)&nest_tables_map);
   /*
     build_pushable_condition would create a sub-condition that would be
     added to the tables inside the nest. This may clone some items too.
@@ -305,7 +308,7 @@ void JOIN::extract_condition_for_the_nest(Mat_nest_info* nest_info)
       extracted for the inner tables of the sort nest
     */
     orig_cond= remove_pushed_top_conjuncts(thd, orig_cond);
-    nest_info->nest_cond= extracted_cond;
+    nest_info->set_nest_cond(extracted_cond);
   }
   conds= orig_cond;
 }
@@ -488,7 +491,7 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables,
 
 bool JOIN::create_sort_nest_info(uint n_tables, table_map nest_tables_map)
 {
-  if (!(sort_nest_info= new SORT_NEST_INFO(n_tables, nest_tables_map)))
+  if (!(sort_nest_info= new SORT_NEST_INFO(this, n_tables, nest_tables_map)))
     return TRUE;
   return FALSE;
 }
@@ -530,7 +533,7 @@ void JOIN::substitute_best_fields_for_order_by_items()
     FALSE  : Nest creation successful
 */
 
-bool JOIN::make_sort_nest(Mat_nest_info *nest_info)
+bool JOIN::make_sort_nest(Mat_join_tab_nest_info *nest_info)
 {
   Field_iterator_table field_iterator;
 
@@ -611,7 +614,7 @@ bool JOIN::make_sort_nest(Mat_nest_info *nest_info)
                                      &order_nest_name)))
     return TRUE; /* purecov: inspected */
 
-  tab->table->map= nest_info->nest_tables_map;
+  tab->table->map= nest_info->get_tables_map();
   nest_info->table= tab->table;
   tab->type= JT_ALL;
   tab->table->reginfo.join_tab= tab;
@@ -621,20 +624,24 @@ bool JOIN::make_sort_nest(Mat_nest_info *nest_info)
     substitution for items that would be evaluated in POST SORT NEST context
   */
   field_iterator.set_table(tab->table);
-  for (; !field_iterator.end_of_fields(); field_iterator.next())
+  List_iterator_fast<Item> li(nest_info->nest_base_table_cols);
+  Item *item;
+  for (; !field_iterator.end_of_fields() && (item= li++);
+       field_iterator.next())
   {
     Field *field= field_iterator.field();
-    Item *item;
-    if (!(item= new (thd->mem_root)Item_temptable_field(thd, field)))
+    Item *nest_item;
+    if (!(nest_item= new (thd->mem_root)Item_temptable_field(thd, field)))
       return TRUE;
-    nest_info->nest_temp_table_cols.push_back(item, thd->mem_root);
+    Item_pair *tmp_field= new Item_pair(item, nest_item);
+    nest_info->mapping_of_items.push_back(tmp_field, thd->mem_root);
   }
 
   /* Setting up the scan on the temp table */
   tab->read_first_record= join_init_read_record;
   tab->read_record.read_record_func= rr_sequential;
   tab[-1].next_select= end_nest_materialization;
-  nest_info->materialized= FALSE;
+  DBUG_ASSERT(!nest_info->is_materialized());
 
   return FALSE;
 }
@@ -945,7 +952,7 @@ bool JOIN::is_join_buffering_allowed(JOIN_TAB *tab)
   if (tab->bush_root_tab)
     return TRUE;
 
-  if (tab->table->map & sort_nest_info->nest_tables_map)
+  if (tab->table->map & sort_nest_info->get_tables_map())
     return TRUE;
   return FALSE;
 }

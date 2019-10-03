@@ -35,6 +35,8 @@
 #include "filesort.h"
 
 typedef struct st_join_table JOIN_TAB;
+class Mat_join_tab_nest_info;
+class SORT_NEST_INFO;
 /* Values in optimize */
 #define KEY_OPTIMIZE_EXISTS		1U
 #define KEY_OPTIMIZE_REF_OR_NULL	2U
@@ -1097,6 +1099,96 @@ private:
 };
 
 
+/**
+  Structure which consists of an item of the base table and the corresponding
+  item to the base item in the nest.
+*/
+
+class Item_pair :public Sql_alloc
+{
+public:
+  Item *base_item;
+  Item *nest_item;
+  Item_pair(Item *a, Item *b)
+    :base_item(a), nest_item(b) {}
+};
+
+
+/*
+  A subset of joined tables that are joined together is called a join table
+  nest. If the result of the join these tables is materialized in a temporary
+  table then the nest is called a materialized join table nest.
+  The class declared below is used for the objects created to handle
+  materialized join tables nests. These objects are supposed to be used at the
+  optimization an execution phases.
+*/
+
+class Mat_join_tab_nest_info : public Sql_alloc
+{
+protected:
+  /* The join which the joined tables from the nest belongs to */
+  JOIN *join;
+  /* Number of joined tables in the nest */
+  uint n_tables;
+  /* The bitmap of joined tables from the nest */
+  table_map nest_tables_map;
+  /* Condition extracted from the WHERE condition and pushed into the nest */
+  Item *nest_cond;
+  /* TRUE <=> materialization already performed */
+  bool materialized;
+
+public:
+  Mat_join_tab_nest_info(JOIN *join_arg, uint tables, table_map tables_map)
+  {
+    join= join_arg;
+    table= NULL;
+    nest_tab= NULL;
+    n_tables= tables;
+    nest_tables_map= tables_map;
+    nest_cond= NULL;
+    materialized= FALSE;
+  }
+
+  TMP_TABLE_PARAM tmp_table_param;
+  List<Item> nest_base_table_cols;
+
+  /*
+    List containing the mapping of items of the base tables with the
+    corresponding items in the nest
+  */
+  List<Item_pair> mapping_of_items;
+  st_join_table *nest_tab;
+  TABLE *table;
+
+  uint number_of_tables() { return n_tables; }
+  table_map get_tables_map() { return nest_tables_map; }
+  void set_nest_cond(Item *cond) { nest_cond= cond; }
+  Item *get_nest_cond()   { return nest_cond; }
+  void set_materialized() { materialized= TRUE; }
+  bool is_materialized()  { return materialized; }
+};
+
+/*
+  A derived class for the sort-nest.
+*/
+
+class SORT_NEST_INFO : public Mat_join_tab_nest_info
+{
+public:
+  SORT_NEST_INFO(JOIN *join_arg, uint tables, table_map tables_map)
+                :Mat_join_tab_nest_info(join_arg, tables, tables_map)
+  {
+    index_used= -1;
+  }
+  /*
+    >=0 set to the index that satisfies the ORDER BY clause and does an index
+        scan on the first non-const table.
+    -1 otherwise
+  */
+  int index_used;
+};
+
+
 class JOIN :public Sql_alloc
 {
 private:
@@ -1843,7 +1935,7 @@ public:
   {
     if (!sort_nest_info)
       return FALSE;
-    return sort_nest_info->n_tables == 1 ? FALSE : TRUE;
+    return sort_nest_info->number_of_tables() == 1 ? FALSE : TRUE;
   }
 
   bool sort_nest_allowed();
@@ -1852,14 +1944,14 @@ public:
   bool check_if_sort_nest_present(uint* n_tables, table_map *tables_map);
   bool create_sort_nest_info(uint n_tables, table_map nest_tables_map);
   bool remove_const_from_order_by();
-  bool make_sort_nest(Mat_nest_info *nest_info);
+  bool make_sort_nest(Mat_join_tab_nest_info *nest_info);
   double calculate_record_count_for_sort_nest(uint n_tables);
-  void substitute_base_with_nest_field_items(Mat_nest_info* nest_info);
+  void substitute_base_with_nest_field_items(Mat_join_tab_nest_info* nest_info);
   void substitute_best_fields_for_order_by_items();
-  void substitute_ref_items(JOIN_TAB *tab, Mat_nest_info* nest_info);
+  void substitute_ref_items(JOIN_TAB *tab, Mat_join_tab_nest_info* nest_info);
   void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
-                                    Mat_nest_info* nest_info);
-  void extract_condition_for_the_nest(Mat_nest_info* nest_info);
+                                    Mat_join_tab_nest_info* nest_info);
+  void extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info);
   void propagate_equal_field_for_orderby();
   void setup_index_use_for_ordering(int index_no);
   void setup_range_scan(JOIN_TAB *tab, uint idx, double records);

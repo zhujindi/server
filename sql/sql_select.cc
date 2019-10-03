@@ -10562,7 +10562,7 @@ bool JOIN::get_best_combination()
       DBUG_RETURN(TRUE);
 
     if (sort_nest_needed())
-      join_tab[const_tables + sort_nest_info->n_tables].is_sort_nest= TRUE;
+      join_tab[const_tables + n_tables].is_sort_nest= TRUE;
     else
       setup_index_use_for_ordering(index_no);
   }
@@ -10587,7 +10587,7 @@ bool JOIN::get_best_combination()
 
     if (j->is_sort_nest)
     {
-      uint tables= sort_nest_info->n_tables;
+      uint tables= n_tables;
       j->join= this;
       j->table= NULL;
       j->ref.key = -1;
@@ -11588,7 +11588,7 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
     Item *saved_cond= cond;
     SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
     if (join->sort_nest_needed())
-      cond= sort_nest_info->nest_cond;
+      cond= sort_nest_info->get_nest_cond();
 
     for (tab= first_depth_first_tab(join); tab;
          tab= next_depth_first_tab(join, tab))
@@ -13417,7 +13417,7 @@ make_join_readinfo(JOIN *join, ulonglong options, uint no_jbuf_after)
 	  else if ((!table->covering_keys.is_clear_all() &&
               !(tab->select && tab->select->quick)) ||
               (sort_nest_info && sort_nest_info->nest_tab == tab &&
-              sort_nest_info->n_tables == 1 &&
+              sort_nest_info->number_of_tables() == 1 &&
               sort_nest_info->index_used >= 0))
 	  {					// Only read index tree
             if (tab->loosescan_match_tab)
@@ -13437,7 +13437,7 @@ make_join_readinfo(JOIN *join, ulonglong options, uint no_jbuf_after)
                 tab->index= table->s->primary_key;
               else
 #endif
-              if (sort_nest_info && sort_nest_info->n_tables == 1 &&
+              if (sort_nest_info && sort_nest_info->number_of_tables() == 1 &&
                   sort_nest_info->nest_tab == tab &&
                   sort_nest_info->index_used >= 0)
               {

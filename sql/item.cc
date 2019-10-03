@@ -6179,28 +6179,27 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
 Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
 {
   Mat_nest_info *nest_info= (Mat_nest_info*)arg;
-  if (!(used_tables() & nest_info->nest_tables_map) &&
+
+  if (!(used_tables() & nest_info->get_tables_map()) &&
       !(used_tables() & OUTER_REF_TABLE_BIT))
     return this;
 
-  List_iterator_fast<Item> li(nest_info->nest_base_table_cols);
-  uint index= 0;
-  Item *item;
-  while((item= li++))
+  List_iterator_fast<Item_pair> li(nest_info->mapping_of_items);
+  Item_pair *item_pair;
+  while((item_pair= li++))
   {
-    Item *field_item= item->real_item();
+    Item *field_item= item_pair->base_item->real_item();
     if (field->eq(((Item_field*)field_item)->field))
     {
       if (used_tables() == OUTER_REF_TABLE_BIT)
       {
         Item_field *clone_item= new (thd->mem_root) Item_field(thd, this);
-        Item *nest_item= nest_info->nest_temp_table_cols.elem(index);
+        Item *nest_item= item_pair->nest_item;
         clone_item->set_field(((Item_field*)nest_item)->field);
         return clone_item;
       }
-      return nest_info->nest_temp_table_cols.elem(index);
+      return item_pair->nest_item;
     }
-    index++;
   }
   return this;
 }
