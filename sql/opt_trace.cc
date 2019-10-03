@@ -646,7 +646,8 @@ void add_table_scan_values_to_trace(THD *thd, JOIN_TAB *tab)
   Add the tables that are inside the sort-nest
   in the optimizer trace
 */
-void add_sort_nest_tables_to_trace(JOIN *join, Mat_nest_info* nest_info)
+void add_sort_nest_tables_to_trace(JOIN *join,
+                                   Mat_join_tab_nest_info* nest_info)
 {
   JOIN_TAB *end_tab, *tab;
   THD *thd= join->thd;

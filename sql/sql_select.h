@@ -35,8 +35,6 @@
 #include "filesort.h"
 
 typedef struct st_join_table JOIN_TAB;
-class Mat_join_tab_nest_info;
-class SORT_NEST_INFO;
 /* Values in optimize */
 #define KEY_OPTIMIZE_EXISTS		1U
 #define KEY_OPTIMIZE_REF_OR_NULL	2U
@@ -1172,10 +1170,10 @@ public:
   A derived class for the sort-nest.
 */
 
-class SORT_NEST_INFO : public Mat_join_tab_nest_info
+class Sort_nest_info : public Mat_join_tab_nest_info
 {
 public:
-  SORT_NEST_INFO(JOIN *join_arg, uint tables, table_map tables_map)
+  Sort_nest_info(JOIN *join_arg, uint tables, table_map tables_map)
                 :Mat_join_tab_nest_info(join_arg, tables, tables_map)
   {
     index_used= -1;
@@ -1637,7 +1635,7 @@ public:
     NOT NULL  sort-nest present
     NULL      sort-nest not present
   */
-  SORT_NEST_INFO *sort_nest_info;
+  Sort_nest_info *sort_nest_info;
 
   /*
     Set to TRUE if the query can use ORDER BY LIMIT optimization with

@@ -105,7 +105,8 @@ void opt_trace_print_expanded_query(THD *thd, SELECT_LEX *select_lex,
                                     Json_writer_object *trace_object);
 
 void add_table_scan_values_to_trace(THD *thd, JOIN_TAB *tab);
-void add_sort_nest_tables_to_trace(JOIN *join, Mat_nest_info* nest_info);
+void add_sort_nest_tables_to_trace(JOIN *join,
+                                   Mat_join_tab_nest_info* nest_info);
 void trace_sort_nest(JOIN *join, uint idx, table_map remaining_tables);
 void trace_plan_prefix(JOIN *join, uint idx, table_map remaining_tables);
 

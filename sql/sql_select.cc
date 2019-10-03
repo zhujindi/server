@@ -11586,7 +11586,7 @@ make_join_select(JOIN *join,SQL_SELECT *select,COND *cond)
     table_map current_map;
     i= join->const_tables;
     Item *saved_cond= cond;
-    SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
+    Sort_nest_info *sort_nest_info= join->sort_nest_info;
     if (join->sort_nest_needed())
       cond= sort_nest_info->get_nest_cond();
 
@@ -12633,7 +12633,7 @@ end_nest_materialization(JOIN *join, JOIN_TAB *join_tab, bool end_of_records)
 {
   int error;
   THD *thd= join->thd;
-  SORT_NEST_INFO *nest_info= join->sort_nest_info;
+  Sort_nest_info *nest_info= join->sort_nest_info;
   DBUG_ENTER("end_sj_materialize");
   if (!end_of_records)
   {
@@ -13271,7 +13271,7 @@ make_join_readinfo(JOIN *join, ulonglong options, uint no_jbuf_after)
   }
  
   check_join_cache_usage_for_tables(join, options, no_jbuf_after);
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
+  Sort_nest_info *sort_nest_info= join->sort_nest_info;
   
   JOIN_TAB *first_tab;
   for (tab= first_tab= first_linear_tab(join, WITH_BUSH_ROOTS, WITHOUT_CONST_TABLES);
@@ -20299,7 +20299,7 @@ do_select(JOIN *join, Procedure *procedure)
 
     JOIN_TAB *join_tab= join->join_tab +
                         (join->tables_list ? join->const_tables : 0);
-    SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
+    Sort_nest_info *sort_nest_info= join->sort_nest_info;
     join_tab= sort_nest_info ? sort_nest_info->nest_tab
                               : join_tab;
 

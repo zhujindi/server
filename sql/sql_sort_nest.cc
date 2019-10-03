@@ -443,7 +443,7 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
     this criteria so it would be extracted from the WHERE clause.
     The extracted condition here would be t1.a > t2.a.
 
-    The extracted condition is stored inside the SORT_NEST_INFO structure.
+    The extracted condition is stored inside the Sort_nest_info structure.
     Also we remove the top level conjuncts of the WHERE clause that were
     present in the extracted condition.
 
@@ -668,7 +668,7 @@ bool JOIN::check_if_sort_nest_present(uint* n_tables,
 
 bool JOIN::create_sort_nest_info(uint n_tables, table_map nest_tables_map)
 {
-  if (!(sort_nest_info= new SORT_NEST_INFO(this, n_tables, nest_tables_map)))
+  if (!(sort_nest_info= new Sort_nest_info(this, n_tables, nest_tables_map)))
     return TRUE;
   return FALSE;
 }
@@ -703,7 +703,7 @@ void JOIN::substitute_best_fields_for_order_by_items()
         that are needed for the post ORDER BY computations
       - Create the materialization temporary table for the sort-nest
 
-    This function fills up the SORT_NEST_INFO structure
+    This function fills up the Sort_nest_info structure
 
   @retval
     TRUE   : In case of error
@@ -1285,7 +1285,7 @@ use_filesort:
       access, we switch back to use Filesort on the first table.
       see @setup_range_scan
     For index scan
-      We just store the index in SORT_NEST_INFO::index_used.
+      We just store the index in Sort_nest_info::index_used.
 */
 
 void JOIN::setup_index_use_for_ordering(int index)

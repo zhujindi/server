@@ -4936,7 +4936,7 @@ int setup_semijoin_dups_elimination(JOIN *join, ulonglong options,
   DBUG_ENTER("setup_semijoin_dups_elimination");
   
   join->complex_firstmatch_tables= table_map(0);
-  SORT_NEST_INFO *sort_nest_info= join->sort_nest_info;
+  Sort_nest_info *sort_nest_info= join->sort_nest_info;
 
   if (sort_nest_info)
     no_jbuf_after= join->const_tables+ sort_nest_info->number_of_tables();
@@ -5552,7 +5552,7 @@ enum_nested_loop_state join_tab_execution_startup(JOIN_TAB *tab)
     */
     enum_nested_loop_state rc;
     JOIN *join= tab->join;
-    SORT_NEST_INFO *nest_info= join->sort_nest_info;
+    Sort_nest_info *nest_info= join->sort_nest_info;
 
     if (!nest_info->is_materialized())
     {

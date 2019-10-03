@@ -6178,7 +6178,7 @@ Item *Item_field::replace_equal_field(THD *thd, uchar *arg)
 
 Item *Item_field::replace_with_nest_items(THD *thd, uchar *arg)
 {
-  Mat_nest_info *nest_info= (Mat_nest_info*)arg;
+  Mat_join_tab_nest_info *nest_info= (Mat_join_tab_nest_info*)arg;
 
   if (!(used_tables() & nest_info->get_tables_map()) &&
       !(used_tables() & OUTER_REF_TABLE_BIT))
