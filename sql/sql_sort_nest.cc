@@ -870,19 +870,20 @@ double JOIN::sort_nest_oper_cost(double join_record_count, uint idx,
     cost=  get_tmp_table_write_cost(thd, join_record_count, rec_len) *
            join_record_count; // cost to fill temp table
 
-  /*
-    TODO varun:
-    should we apply the limit here as we would read only
-    join_record_count * selectivity_of_limit records
-  */
-  double records= 1.0;
-  set_if_bigger(records, join_record_count * fraction_output_for_nest);
-  cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) *
-         join_record_count;   // cost to perform post join operation used here
+  // cost to perform  sorting
   cost+= get_tmp_table_lookup_cost(thd, join_record_count, rec_len) +
          (join_record_count == 0 ? 0 :
           join_record_count * log2 (join_record_count)) *
-         SORT_INDEX_CMP_COST; // cost to perform  sorting
+         SORT_INDEX_CMP_COST;
+
+  /*
+    cost for scanning the temp table.
+    Picked this cost from get_delayed_table_estimates()
+  */
+  double data_size= COST_MULT(join_record_count * fraction_output_for_nest,
+                              rec_len);
+  cost+= data_size/IO_SIZE + 2;
+
   return cost;
 }
 
