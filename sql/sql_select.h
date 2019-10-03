@@ -1944,7 +1944,8 @@ public:
   bool remove_const_from_order_by();
   bool make_sort_nest(Mat_join_tab_nest_info *nest_info);
   double calculate_record_count_for_sort_nest(uint n_tables);
-  void substitute_base_with_nest_field_items(Mat_join_tab_nest_info* nest_info);
+  void
+  substitute_base_with_nest_field_items(Mat_join_tab_nest_info* nest_info);
   void substitute_best_fields_for_order_by_items();
   void substitute_ref_items(JOIN_TAB *tab, Mat_join_tab_nest_info* nest_info);
   void substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,

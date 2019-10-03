@@ -218,8 +218,9 @@ void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
 
 /*
   @brief
-    Substitute field items of tables inside the sort-nest with sort-nest's
-    field items.
+    Substitute field items of tables inside the nest with nest's field items.
+
+  @param nest_info          Structure holding information about the nest
 
   @details
     Substitute field items of tables inside the sort-nest with sort-nest's
@@ -260,8 +261,8 @@ void find_cost_of_index_with_ordering(THD *thd, const JOIN_TAB *tab,
       - REF access items
 */
 
-void JOIN::substitute_base_with_nest_field_items(Mat_join_tab_nest_info
-                                                 *nest_info)
+void
+JOIN::substitute_base_with_nest_field_items(Mat_join_tab_nest_info *nest_info)
 {
   List_iterator<Item> it(fields_list);
   Item *item, *new_item;
@@ -334,9 +335,10 @@ void JOIN::substitute_base_with_nest_field_items(Mat_join_tab_nest_info
 
 /*
   @brief
-    Substitute ref access field items with sort-nest field items.
+    Substitute ref access field items with nest's field items.
 
   @param tab                join tab structure having ref access
+  @param nest_info          Structure holding information about the nest
 
 */
 
@@ -368,14 +370,14 @@ void JOIN::substitute_ref_items(JOIN_TAB *tab,
 
 /*
   @brief
-    Substitute the left expression of the IN subquery with sort-nest
-    field items.
+    Substitute the left expression of the IN subquery with nest's field items.
 
-  @param sjm_tab                SJM lookup join tab
+  @param sjm_tab           SJM lookup join tab
+  @param nest_info         Structure holding information about the nest
 
   @details
     This substitution is needed for SJM lookup when the SJM materialized
-    table is outside the sort-nest.
+    table is outside the nest.
 
     For example:
       SELECT t1.a, t2.a
@@ -385,12 +387,17 @@ void JOIN::substitute_ref_items(JOIN_TAB *tab,
       LIMIT 5;
 
     Lets consider the join order here is t1, t2, <subquery2> and there is a
-    sort-nest on t1, t2. For <subquery2> we do SJM lookup.
+    nest on t1, t2. For <subquery2> we do SJM lookup.
     So for the SJM table there would be a ref access created on the condition
-    t2.a=it.b. But as one can see table t2 is inside the sort-nest and the
-    condition t2.a=it.b can only be evaluated in the post ORDER BY context,
-    so we need to substitute t2.a with the corresponding field item in the
-    sort-nest.
+    t2.a=it.b. But as one can see table t2 is inside the nest and the
+    condition t2.a=it.b can only be evaluated in the post nest creation
+    context, so we need to substitute t2.a with the corresponding field item
+    of the nest.
+
+    For example:
+      If we had a sort nest on t1,t2 the the condition t2.a = it.b will be
+      evaluated in the POST ORDER BY context, so t2.a should refer to the
+      field item of the sort nest.
 
 */
 
@@ -420,13 +427,13 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
 
 /*
   @brief
-    Extract from the WHERE clause the sub-condition which is internal to the
-    sort-nest
+    Extract from the WHERE clause the sub-condition for tables inside the nest.
+
+  @param  nest_info               Structure holding information about the nest
 
   @details
     Extract the sub-condition from the WHERE clause that can be added to the
-    tables inside the sort-nest and can be evaluated before the sorting is done
-    for the sort-nest.
+    tables inside the nest.
 
   Example
     SELECT * from t1,t2,t3
@@ -435,15 +442,17 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
     ORDER BY t1.a,t2.a
     LIMIT 5;
 
-    let's say in this case the join order is t1,t2,t3 and there is a sort-nest
+    let's say in this case the join order is t1,t2,t3 and there is a nest
     on t1,t2
 
     From the WHERE clause we would like to extract the condition that depends
-    only on the inner tables of the sort-nest. The condition (1) here satisfies
+    only on the inner tables of the nest. The condition (1) here satisfies
     this criteria so it would be extracted from the WHERE clause.
     The extracted condition here would be t1.a > t2.a.
 
-    The extracted condition is stored inside the Sort_nest_info structure.
+    The extracted condition is stored inside the Mat_join_tab_nest_info
+    structure.
+
     Also we remove the top level conjuncts of the WHERE clause that were
     present in the extracted condition.
 
@@ -451,6 +460,9 @@ void JOIN::substitutions_for_sjm_lookup(JOIN_TAB *sjm_tab,
       WHERE clause:    t2.b = t3.b         ----> condition external to the nest
       extracted cond:  t1.a > t2.a         ----> condition internal to the nest
 
+    @note
+      For the sort nest the sub-condition will be evaluated before the
+      ORDER BY clause is applied.
 */
 
 void JOIN::extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info)
@@ -460,18 +472,16 @@ void JOIN::extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info)
   Item *extracted_cond;
 
   /*
-    check_cond_extraction_for_nest would set NO_EXTRACTION_FL for
-    all the items that cannot be added to the inner tables of the nest.
-    TODO varun:
-      -change name to check_pushable_cond_extraction
-      -please use 2 functions here, not use a structure, looks complex
+    check_pushable_cond_extraction would set the flag NO_EXTRACTION_FL for
+    all the predicates that cannot be added to the inner tables of the nest.
   */
   table_map nest_tables_map= nest_info->get_tables_map();
-  orig_cond->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
-                                           (uchar*)&nest_tables_map);
+  conds->check_pushable_cond_extraction(&Item::pushable_cond_checker_for_tables,
+                                        (uchar*)&nest_tables_map);
+
   /*
     build_pushable_condition would create a sub-condition that would be
-    added to the tables inside the nest. This may clone some items too.
+    added to the inner tables of the nest. This may clone some predicates too.
   */
   extracted_cond= orig_cond->build_pushable_condition(thd, TRUE);
 
@@ -482,7 +492,7 @@ void JOIN::extract_condition_for_the_nest(Mat_join_tab_nest_info* nest_info)
     extracted_cond->update_used_tables();
     /*
       Remove from the WHERE clause  the top level conjuncts that were
-      extracted for the inner tables of the sort nest
+      extracted for the inner tables of the nest
     */
     orig_cond= remove_pushed_top_conjuncts(thd, orig_cond);
     nest_info->set_nest_cond(extracted_cond);
@@ -696,6 +706,9 @@ void JOIN::substitute_best_fields_for_order_by_items()
 /*
   @brief
     Make the sort-nest.
+
+  @param
+    nest_info               Structure holding information about the nest
 
   @details
     Setup execution structures for sort-nest materialization:

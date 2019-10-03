@@ -29174,11 +29174,12 @@ bool JOIN::is_order_by_expensive()
 bool JOIN::estimate_cardinality_for_join(table_map joined_tables)
 {
   Json_writer_temp_disable disable_tracing(thd);
+  uint use_cond_selectivity;
   uint search_depth= thd->variables.optimizer_search_depth;
   if (search_depth == 0)
     search_depth= determine_search_depth(this);
   uint prune_level=  thd->variables.optimizer_prune_level;
-  uint use_cond_selectivity= thd->variables.optimizer_use_condition_selectivity;
+  use_cond_selectivity= thd->variables.optimizer_use_condition_selectivity;
 
   TABLE *save_sort_by_table= sort_by_table;
   JOIN_TAB *save_best_ref[MAX_TABLES];
