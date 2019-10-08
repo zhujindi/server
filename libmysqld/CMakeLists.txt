@@ -129,6 +129,7 @@ SET(SQL_EMBEDDED_SOURCES emb_qcache.cc libmysqld.c lib_sql.cc
            ../sql/rowid_filter.cc ../sql/rowid_filter.h
            ../sql/item_vers.cc
            ../sql/opt_trace.cc
+           ../sql/sql_sort_nest.cc
            ../sql/xa.cc
            ${GEN_SOURCES}
            ${MYSYS_LIBWRAP_SOURCE}
