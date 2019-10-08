@@ -12,7 +12,7 @@ analyze table nation   persistent for all;
 
 --echo # done to avoid filter for now
 set optimizer_switch='rowid_filter=off';
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 
 --echo #
 --echo # USING INDEXES FOR ORDERING
@@ -32,11 +32,11 @@ let $query= SELECT
             ORDER BY o_orderDATE DESC 
             LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -57,11 +57,11 @@ let $query= SELECT
             ORDER BY o_orderDATE, o_custkey DESC 
             LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -87,11 +87,11 @@ let $query= SELECT
             ORDER BY o_totalprice DESC 
             LIMIT 10;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -112,11 +112,11 @@ let $query= SELECT
             ORDER BY l_extendedprice DESC
             LIMIT 10;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -141,11 +141,11 @@ let $query= SELECT
             ORDER BY o_orderDATE DESC, c_acctbal DESC
             LIMIT 10;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -171,11 +171,11 @@ let $query= SELECT
             LIMIT 20;
 
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
 
@@ -204,13 +204,12 @@ let $query= SELECT
             LIMIT 20;
 
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 eval $query;
-
 
 drop database dbt3;

@@ -1,6 +1,6 @@
 --source include/have_sequence.inc
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 
 CREATE TABLE t0 (a int);
 INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
@@ -594,7 +594,7 @@ WHERE t1.a=t2.a and t1.b= 4
 ORDER BY t1.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
@@ -627,11 +627,11 @@ WHERE t1.a=t2.b and t2.a=t3.a
 ORDER BY abs(t3.a+t1.b) DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -654,12 +654,12 @@ WHERE t1.a=t2.b and t2.a=t3.a
 ORDER BY f1(t3.a+t1.b) DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 eval $query;
 
@@ -676,12 +676,12 @@ WHERE t1.a=t2.b AND t2.a=t3.a
 ORDER BY row_number() OVER (ORDER BY t1.a) DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -700,11 +700,11 @@ t1.b = (select t2.b from t2,t3,t4
         where t2.a=t1.a and t3.b=t4.b
         ORDER BY t2.c,t3.c limit 1);
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -719,12 +719,12 @@ t1.b = (select t2.b from t2,t3,t4
         where t2.a=t3.a and t3.b=t4.b
         ORDER BY t2.c,t3.c limit 1);
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -739,11 +739,11 @@ FROM (SELECT t1.a as t, t2.b as u, t1.b as v, t3.a as x
       ORDER BY t2.b DESC, t1.b DESC
       LIMIT 5)q;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -758,7 +758,7 @@ WHERE t1.a = t2.a
 ORDER BY t2.b DESC, t1.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
@@ -774,11 +774,11 @@ WHERE t1.a = t2.a and t2.c=t3.c
 ORDER BY t2.b DESC, t1.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -794,12 +794,12 @@ t1.b=(SELECT A.a FROM t3 A WHERE A.b > 1 and t3.b=t1.b limit 1)
 ORDER BY t2.b DESC, t1.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -816,11 +816,11 @@ ORDER BY t2.b, t1.b,
          (SELECT A.a FROM t3 A WHERE A.a < 5 limit 1)
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -837,11 +837,11 @@ ORDER BY t2.b, t1.b,
          (SELECT A.a FROM t3 A WHERE A.a = t1.c limit 1)
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 drop table t0,t1,t2,t3,t4;

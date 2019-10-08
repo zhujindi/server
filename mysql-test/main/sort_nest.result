@@ -1,4 +1,4 @@
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 CREATE TABLE t0 (a int);
 INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
 CREATE TABLE t1 (a int, b int);
@@ -1772,7 +1772,7 @@ INSERT INTO t0 SELECT seq-1 from seq_1_to_10;
 CREATE TABLE t1 (a int, b int);
 INSERT INTO t1 SELECT a, a from t0;
 CREATE TABLE t2 as SELECT * from t1;
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT *
 FROM t1,t2
 WHERE t1.a=t2.a and t1.b= 4
@@ -1804,7 +1804,7 @@ ANALYZE TABLE t1 PERSISTENT FOR ALL;
 ANALYZE TABLE t2 PERSISTENT FOR ALL;
 ANALYZE TABLE t3 PERSISTENT FOR ALL;
 ANALYZE TABLE t4 PERSISTENT FOR ALL;
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b and t2.a=t3.a
@@ -1826,7 +1826,7 @@ a	b	b	t1.b + t2.b
 2	2	2	4
 1	1	1	2
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b and t2.a=t3.a
@@ -1845,7 +1845,7 @@ CREATE FUNCTION f1(a INT) RETURNS INT
 BEGIN
 RETURN a;
 END|
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b and t2.a=t3.a
@@ -1912,7 +1912,7 @@ a	b	b	t1.b + t2.b
 2	2	2	4
 1	1	1	2
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b and t2.a=t3.a
@@ -1937,7 +1937,7 @@ drop function f1;
 #
 # Window function in order by clause, sort-nest not allowed
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b AND t2.a=t3.a
@@ -2011,7 +2011,7 @@ a	b	b	t1.b + t2.b
 2	2	2	4
 1	1	1	2
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t1.a, t2.b, t1.b, t1.b + t2.b
 FROM t1,t2, t3
 WHERE t1.a=t2.b AND t2.a=t3.a
@@ -2029,7 +2029,7 @@ a	b	b	t1.b + t2.b
 #
 # Dependent subqueries cannot have a sort-nest
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT *
 FROM t1
 WHERE
@@ -2053,7 +2053,7 @@ a	b	c
 2	2	2
 3	3	3
 4	4	4
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT *
 FROM t1
 WHERE
@@ -2069,7 +2069,7 @@ a	b	c
 #
 # Independent subqueries can have a sort-nest
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT *
 FROM t1
 WHERE
@@ -2090,7 +2090,7 @@ where t2.a=t3.a and t3.b=t4.b
 ORDER BY t2.c,t3.c limit 1);
 a	b	c
 0	0	0
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT *
 FROM t1
 WHERE
@@ -2102,7 +2102,7 @@ a	b	c
 #
 # Sort nest inside a derived table
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT *
 FROM (SELECT t1.a as t, t2.b as u, t1.b as v, t3.a as x
 FROM t1,t2,t3
@@ -2127,7 +2127,7 @@ t	u	v	x
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT *
 FROM (SELECT t1.a as t, t2.b as u, t1.b as v, t3.a as x
 FROM t1,t2,t3
@@ -2143,7 +2143,7 @@ t	u	v	x
 #
 # sort-nest(t2,t1) and independent subquery in the SELECT list
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT (SELECT A.a FROM t3 A WHERE A.a > 5 limit 1) as x,
 t2.b, t1.b, t3.a
 FROM t1,t2,t3
@@ -2171,7 +2171,7 @@ x	b	b	a
 #
 # sort-nest(t2,t1) and dependent subquery in the SELECT list
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT (SELECT A.a FROM t3 A WHERE A.a = t1.b limit 1) as x,
 t2.b, t1.b, t3.a
 FROM t1,t2,t3
@@ -2196,7 +2196,7 @@ x	b	b	a
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT (SELECT A.a FROM t3 A WHERE A.a = t1.b limit 1) as x,
 t2.b, t1.b, t3.a
 FROM t1,t2,t3
@@ -2213,7 +2213,7 @@ x	b	b	a
 # Dependent Subquery attached outside the sort-nest, references inside
 # subquery changed to sort-nest field items
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t2.b, t1.b, t3.a
 FROM t1,t2,t3
 WHERE t1.a = t2.a AND t2.c = t3.c AND
@@ -2300,7 +2300,7 @@ ORDER BY t2.b DESC, t1.b DESC
 LIMIT 5;
 b	b	a
 2	2	2
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t2.b, t1.b, t3.a
 FROM t1,t2,t3
 WHERE t1.a = t2.a AND t2.c = t3.c AND
@@ -2313,7 +2313,7 @@ b	b	a
 # sort-nest(t2,t1) and independent subquery in the ORDER BY clause
 #
 # Subquery will be a constant in ORDER BY and will be removed
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t2.b, t1.b, t3.c
 FROM t1,t2,t3
 WHERE t1.a = t2.a and t2.c=t3.c
@@ -2338,7 +2338,7 @@ b	b	c
 2	2	2
 3	3	3
 4	4	4
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t2.b, t1.b, t3.c
 FROM t1,t2,t3
 WHERE t1.a = t2.a and t2.c=t3.c
@@ -2355,7 +2355,7 @@ b	b	c
 # sort-nest(t2,t1) and dependent subquery in the ORDER BY clause
 #
 # Subquery is expensive to evaluate, so don't use a sort-nest
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t2.b, t1.b, t3.c
 FROM t1,t2,t3
 WHERE t1.a = t2.a and t2.c=t3.c
@@ -2379,7 +2379,7 @@ b	b	c
 2	2	2
 3	3	3
 4	4	4
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t2.b, t1.b, t3.c
 FROM t1,t2,t3
 WHERE t1.a = t2.a and t2.c=t3.c

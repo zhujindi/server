@@ -42,12 +42,12 @@ FROM t1, t2
 ORDER BY t1.b DESC ,t2.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo #
@@ -64,11 +64,11 @@ WHERE t1.a=t2.a AND t2.b < 5 AND
 ORDER BY t2.b DESC, t1.b DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 DROP TABLE t0, t1, t2, t3, t4;
@@ -104,12 +104,12 @@ WHERE t2.a in (SELECT t3.b from t3)
 ORDER BY t1.b DESC, t2.a DESC
 LIMIT 5;
 
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 DROP TABLE t1, t2, t3, t4;
@@ -132,12 +132,12 @@ t1.b IN (SELECT b FROM t3 WHERE t3.c<=t2.c)
 ORDER BY t2.c DESC, t1.c DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 set optimizer_switch='firstmatch=off';
@@ -146,12 +146,12 @@ set optimizer_switch='firstmatch=off';
 --echo # Duplicate Weedout strategy
 --echo #
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 set optimizer_switch=@save_optimizer_switch;
@@ -179,12 +179,12 @@ t1.a IN (SELECT max(t3.a) FROM t3 GROUP BY t3.b)
 ORDER BY t2.a DESC,t1.a DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 --echo <subquery2> inside the sort-nest
@@ -196,12 +196,12 @@ t3.a IN (SELECT max(t1.a) FROM t1 GROUP BY t1.b)
 ORDER BY t3.a DESC,t2.a DESC
 LIMIT 5;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval EXPLAIN FORMAT=JSON $query;
 eval $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval $query;
 
 DROP TABLE t1,t2,t3,t0;

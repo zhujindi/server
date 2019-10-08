@@ -22,7 +22,7 @@ ANALYZE TABLE t3 PERSISTENT FOR ALL;
 ANALYZE TABLE t4 PERSISTENT FOR ALL;
 # SJM scan inside the sort-nest
 # sort-nest includes (t2, <subquery2>)
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.a, t1.b,t2.b
 FROM t1, t2
 WHERE t1.a=t2.a AND
@@ -121,7 +121,7 @@ a	a	b	b
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t1.a, t2.a, t1.b,t2.b
 FROM t1, t2
 WHERE t1.a=t2.a AND
@@ -137,7 +137,7 @@ a	a	b	b
 # SJM scan table is the first table inside the sort-nest
 #
 alter table t2 add key(b);
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.a, t1.b,t2.b
 FROM t1, t2
 WHERE t1.a=t2.a AND t2.b < 5 AND
@@ -163,7 +163,7 @@ a	a	b	b
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t1.a, t2.a, t1.b,t2.b
 FROM t1, t2
 WHERE t1.a=t2.a AND t2.b < 5 AND
@@ -192,7 +192,7 @@ ANALYZE TABLE t1 PERSISTENT FOR ALL;
 ANALYZE TABLE t2 PERSISTENT FOR ALL;
 ANALYZE TABLE t3 PERSISTENT FOR ALL;
 ANALYZE TABLE t4 PERSISTENT FOR ALL;
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT t1.a, t2.a, t2.b
 FROM t1, t2
 WHERE t2.a in (SELECT t3.b from t3)
@@ -286,7 +286,7 @@ a	a	b
 2	2	2
 1	1	1
 0	0	0
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT t1.a, t2.a, t2.b
 FROM t1, t2
 WHERE t2.a in (SELECT t3.b from t3)
@@ -311,7 +311,7 @@ create table t1 (a int, b int, c int, key(a));
 insert t1 SELECT a,a,a from t0;
 create table t2 as SELECT * from t1;
 create table t3 as SELECT * from t1;
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT * FROM t1, t2
 WHERE t1.a=t2.a AND
 t1.b IN (SELECT b FROM t3 WHERE t3.c<=t2.c)
@@ -381,7 +381,7 @@ a	b	c	a	b	c
 7	7	7	7	7	7
 6	6	6	6	6	6
 5	5	5	5	5	5
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT * FROM t1, t2
 WHERE t1.a=t2.a AND
 t1.b IN (SELECT b FROM t3 WHERE t3.c<=t2.c)
@@ -397,7 +397,7 @@ set optimizer_switch='firstmatch=off';
 #
 # Duplicate Weedout strategy
 #
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT * FROM t1, t2
 WHERE t1.a=t2.a AND
 t1.b IN (SELECT b FROM t3 WHERE t3.c<=t2.c)
@@ -468,7 +468,7 @@ a	b	c	a	b	c
 7	7	7	7	7	7
 6	6	6	6	6	6
 5	5	5	5	5	5
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT * FROM t1, t2
 WHERE t1.a=t2.a AND
 t1.b IN (SELECT b FROM t3 WHERE t3.c<=t2.c)
@@ -493,7 +493,7 @@ create table t2 as SELECT * from t1 where a < 5;
 create table t3(a int, b int);
 INSERT INTO t3 SELECT seq-1, seq-1 FROM seq_1_to_100;
 <subquery2> outside the sort-nest
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT * from t2,t1
 WHERE t2.b=t1.b
 AND
@@ -584,7 +584,7 @@ a	b	a	b
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT * from t2,t1
 WHERE t2.b=t1.b
 AND
@@ -598,7 +598,7 @@ a	b	a	b
 1	1	1	1
 0	0	0	0
 <subquery2> inside the sort-nest
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 EXPLAIN SELECT * FROM t3,t2
 WHERE t3.b=t2.b AND
 t3.a IN (SELECT max(t1.a) FROM t1 GROUP BY t1.b)
@@ -682,7 +682,7 @@ a	b	a	b
 2	2	2	2
 1	1	1	1
 0	0	0	0
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 SELECT * FROM t3,t2
 WHERE t3.b=t2.b AND
 t3.a IN (SELECT max(t1.a) FROM t1 GROUP BY t1.b)

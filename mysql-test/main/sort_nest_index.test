@@ -10,11 +10,11 @@ insert into t1 values (1,7,2), (1,8,2), (1,9,2), (1,10,2), (1,11,2), (1,12,2);
 --echo #
 
 let $query= select a,b,c from t1 where a=1 and c=2 order by b limit 5;
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval explain $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval explain $query;
 drop table t1;
 
@@ -35,11 +35,11 @@ insert into t1 values (1,1,2);
 let $query= select a,b,c from t1 where a=1 and c=2 order by b limit 10;
 set optimizer_trace=1;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval explain $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval explain $query;
 
 drop table t1;
@@ -58,11 +58,11 @@ INSERT INTO t1 VALUES (1,'a'), (2,'b'), (3,'c'), (4,'d');
 
 let $query= SELECT * FROM t1 WHERE a BETWEEN 1 and 2 ORDER BY a LIMIT 2;
 
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 
 --echo #
@@ -71,11 +71,11 @@ eval EXPLAIN $query;
 
 let $query= SELECT * FROM t1 WHERE a BETWEEN 1 and 2 ORDER BY a DESC LIMIT 2;
 
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 eval $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 
 drop table t1;
@@ -104,11 +104,11 @@ WHERE
   t1.b=t2.b
 ORDER BY t1.b LIMIT 10;
 
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 
 --echo #
@@ -121,18 +121,18 @@ WHERE
   t1.b=t2.b
 ORDER BY t1.b LIMIT 10;
 
-set use_sort_nest= 1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest= 0;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval EXPLAIN $query;
 
 drop table t1,t2;
 
 --echo # TESTS with INDEX HINTS
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 create table t0 (a int);
 insert into t0 values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
 create table t1 (a int, b int,c int, key idx1(a), key idx2(a,b), key idx3(c));
@@ -147,11 +147,11 @@ analyze table t1 persistent for all;
 --echo #
 
 let $query= SELECT * from t1 where b > 0 order by t1.a limit 2;
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -159,11 +159,11 @@ eval EXPLAIN $query;
 --echo #
 
 let $query= SELECT * from t1 USE INDEX(idx2) WHERE b > 0 ORDER BY t1.a LIMIT 2;
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -175,11 +175,11 @@ SELECT * from t1 USE INDEX FOR ORDER BY(idx2)
 WHERE b > 0
 ORDER BY t1.a LIMIT 2;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -191,11 +191,11 @@ SELECT * from t1 USE INDEX FOR ORDER BY(idx3)
 WHERE b > 0
 ORDER BY t1.a LIMIT 2;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -207,11 +207,11 @@ SELECT * from t1 IGNORE INDEX(idx1)
 WHERE b > 0
 ORDER BY t1.a LIMIT 2;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -223,11 +223,11 @@ SELECT * from t1 FORCE INDEX(idx2)
 WHERE b > 0
 ORDER BY t1.a LIMIT 2;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 --echo #
@@ -239,11 +239,11 @@ SELECT * from t1 FORCE INDEX FOR ORDER BY(idx3)
 WHERE b > 0
 ORDER BY t1.a LIMIT 2;
 
-set use_sort_nest=1;
+set optimizer_switch='cost_based_order_by_limit=on';
 eval $query;
 eval EXPLAIN $query;
 
-set use_sort_nest=0;
+set optimizer_switch='cost_based_order_by_limit=off';
 eval EXPLAIN $query;
 
 drop table t0,t1;
