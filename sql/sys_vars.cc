@@ -2598,6 +2598,7 @@ export const char *optimizer_switch_names[]=
   "condition_pushdown_for_subquery",
   "rowid_filter",
   "condition_pushdown_from_having",
+  "cost_based_order_by_limit",
   "default", 
   NullS
 };
@@ -6383,9 +6384,3 @@ static Sys_var_ulonglong Sys_max_rowid_filter_size(
        SESSION_VAR(max_rowid_filter_size), CMD_LINE(REQUIRED_ARG),
        VALID_RANGE(1024, (ulonglong)~(intptr)0), DEFAULT(128*1024),
        BLOCK_SIZE(1));
-
-static Sys_var_mybool Sys_use_sort_nest(
-       "use_sort_nest",
-       "Enable the sort nest",
-       SESSION_VAR(use_sort_nest), CMD_LINE(OPT_ARG),
-       DEFAULT(FALSE));
