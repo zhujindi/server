@@ -274,7 +274,7 @@ UNIV_INLINE
 dberr_t
 pfs_os_file_read_func(
 	const IORequest&	type,
-	pfs_os_file_t		file,
+	pfs_os_file_t	file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,
@@ -316,7 +316,7 @@ UNIV_INLINE
 dberr_t
 pfs_os_file_read_no_error_handling_func(
 	const IORequest&	type,
-	pfs_os_file_t		file,
+	pfs_os_file_t	file,
 	void*			buf,
 	os_offset_t		offset,
 	ulint			n,

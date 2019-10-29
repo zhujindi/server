@@ -345,8 +345,8 @@ public:
 	/** Vector of FTS indexes, this is mainly for caching purposes. */
 	ib_vector_t*	indexes;
 
-	/** Whether the table exists in fts_optimize_wq;
-	protected by fts_optimize_wq mutex */
+	/** Whether the table is being optimized.
+	protected by bg_threads_mutex.*/
 	bool		in_queue;
 
 	/** Heap for fts_t allocation. */
@@ -648,6 +648,8 @@ Startup the optimize thread and create the work queue. */
 void
 fts_optimize_init(void);
 /*====================*/
+
+extern bool fts_optimize_init_done;
 
 /****************************************************************//**
 Drops index ancillary tables for a FTS index

@@ -62,10 +62,6 @@ trx_purge(
 	ulint	n_purge_threads,	/*!< in: number of purge tasks to
 					submit to task queue. */
 	bool	truncate		/*!< in: truncate history if true */
-#ifdef UNIV_DEBUG
-	, srv_slot_t *slot		/*!< in/out: purge coordinator
-					thread slot */
-#endif
 );
 
 /** Rollback segements from a given transaction with trx-no
@@ -140,18 +136,30 @@ private:
 	TrxUndoRsegs::const_iterator	m_iter;
 };
 
+/*
+	Structure used by coordinator.
+*/
+struct purge_coordinator_state
+{
+	/* Snapshot of the last history length before the purge call.*/
+	uint32 m_history_length;
+	/* Number of wakeups.*/
+	Atomic_counter<int> m_sigcount;
+
+	purge_coordinator_state() :
+		m_history_length(), m_sigcount(0)
+	{}
+};
+
 /** The control structure used in the purge operation */
 class purge_sys_t
 {
 public:
-	/** signal state changes; os_event_reset() and os_event_set()
-	are protected by rw_lock_x_lock(latch) */
-	MY_ALIGNED(CACHE_LINE_SIZE)
-	os_event_t	event;
 	/** latch protecting view, m_enabled */
 	MY_ALIGNED(CACHE_LINE_SIZE)
 	rw_lock_t	latch;
 private:
+	bool m_initialized;
 	/** whether purge is enabled; protected by latch and std::atomic */
 	std::atomic<bool>		m_enabled;
 	/** number of pending stop() calls without resume() */
@@ -162,9 +170,6 @@ public:
 	MY_ALIGNED(CACHE_LINE_SIZE)
 	ReadView	view;		/*!< The purge will not remove undo logs
 					which are >= this view (purge view) */
-	/** Number of not completed tasks. Accessed by srv_purge_coordinator
-	and srv_worker_thread by std::atomic. */
-	std::atomic<ulint>	n_tasks;
 
 	/** Iterator to the undo log records of committed transactions */
 	struct iterator
@@ -218,6 +223,8 @@ public:
 					by the pq_mutex */
 	PQMutex		pq_mutex;	/*!< Mutex protecting purge_queue */
 
+	purge_coordinator_state	m_coordinator_state;  /**!< State of purge coordinator */
+
 	/** Undo tablespace file truncation (only accessed by the
 	srv_purge_coordinator_thread) */
 	struct {
@@ -234,7 +241,7 @@ public:
     uninitialised. Real initialisation happens in create().
   */
 
-  purge_sys_t() : event(NULL), m_enabled(false), n_tasks(0) {}
+  purge_sys_t():m_initialized(false),m_enabled(false),m_coordinator_state() {}
 
 
   /** Create the instance */
@@ -266,6 +273,12 @@ public:
 
   /** @return whether the purge coordinator thread is active */
   bool running();
+
+  /** Change coordinator state to running. */
+  void set_running();
+  /** Change coordinator state to idle. */
+  void set_idle();
+
   /** Stop purge during FLUSH TABLES FOR EXPORT */
   void stop();
   /** Resume purge at UNLOCK TABLES after FLUSH TABLES FOR EXPORT */

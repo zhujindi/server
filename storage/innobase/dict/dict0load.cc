@@ -3079,7 +3079,7 @@ func_exit:
 			FTS */
 			fts_optimize_remove_table(table);
 			fts_free(table);
-		} else if (fts_optimize_wq) {
+		} else if (fts_optimize_init_done) {
 			fts_optimize_add_table(table);
 		} else if (table->can_be_evicted) {
 			/* fts_optimize_thread is not started yet.
