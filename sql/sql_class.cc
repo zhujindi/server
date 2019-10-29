@@ -4793,6 +4793,103 @@ void destroy_thd(MYSQL_THD thd)
   delete thd;
 }
 
+/**
+  Create a THD that only has auxilliary functions
+  It will never be added to the global connection list
+  server_threads. It does not represent any client connection.
+
+  It should never be counted, because it will stall the
+  shutdown. It is solely for engine's internal use,
+  like for example, evaluation of virtual function in innodb
+  purge.
+*/
+MYSQL_THD create_background_thd()
+{
+  DBUG_ASSERT(!current_thd);
+  auto save_mysysvar = _my_thread_var();
+  /*
+    Allocate new mysys_var specifically this THD,
+    so that e.g safemalloc, DBUG etc are happy.
+  */
+  set_mysys_var(0);
+  my_thread_init();
+  auto thd_mysysvar = _my_thread_var();
+
+  DBUG_ASSERT(save_mysysvar != thd_mysysvar);
+  DBUG_ASSERT(thd_mysysvar);
+
+  auto thd = new THD(0);
+  /*
+    Workaround the adverse effect of incrementing thread_count in THD constructor.
+    We do not want these THDs to be counted, or waited for on shutdown.
+  */
+  thread_count--;
+
+  thd->mysys_var= thd_mysysvar;
+  thd->set_command(COM_DAEMON);
+  thd->system_thread = SYSTEM_THREAD_GENERIC;
+  thd->security_ctx->host_or_ip = "";
+
+  set_mysys_var(save_mysysvar);
+  return thd;
+}
+
+/* Used by Innodb purge threads*/
+extern "C" void* thd_attach_thd(THD * thd)
+{
+  DBUG_ASSERT(!current_thd);
+  DBUG_ASSERT(thd && thd->mysys_var);
+
+  auto save_mysysvar= _my_thread_var();
+  set_mysys_var(thd->mysys_var);
+  thd->thread_stack= (char*)&thd;
+  thd->store_globals();
+  DBUG_ASSERT(current_thd == thd && _my_thread_var() == thd->mysys_var);
+  return save_mysysvar;
+}
+
+extern "C" void thd_detach_thd(void *mysysvar)
+{
+  /* Restore mysys_var that is changed when THD was attached.*/
+  set_mysys_var((st_my_thread_var *)mysysvar);
+  /* Restore the THD (we assume it was NULL during attach).*/
+  set_current_thd(0);
+}
+
+/*
+  Destroy a THD that was previously created by
+  create_background_thd()
+*/
+void destroy_background_thd(MYSQL_THD thd)
+{
+  DBUG_ASSERT(!current_thd);
+
+  auto thd_mysys_var= thd->mysys_var;
+  auto save_mysys_var= (st_my_thread_var*)thd_attach_thd(thd);
+  /*
+    Workaround the adverse effect decrementing thread_count on THD()
+    destructor.
+    As we decremented it in create_background_thd(), in order for it
+    not to go negative, we have to increment it before destructor.
+  */
+  thread_count++;
+  delete thd;
+
+  thd_detach_thd(save_mysys_var);
+  /*
+     Delete THD-specific my_thread_var, that was
+     allocated in create_background_thd().
+     Also preserve current PSI context, since my_thread_end()
+     would kill it, if we're not careful.
+  */
+  auto save_psi_thread = PSI_CALL_get_thread();
+  PSI_CALL_set_thread(0);
+  set_mysys_var(thd_mysys_var);
+  my_thread_end();
+  set_mysys_var(save_mysys_var);
+  PSI_CALL_set_thread(save_psi_thread);
+}
+
 void reset_thd(MYSQL_THD thd)
 {
   close_thread_tables(thd);
@@ -4900,6 +4997,8 @@ thd_need_wait_reports(const MYSQL_THD thd)
     return false;
   return rgi->is_parallel_exec;
 }
+
+
 
 /*
   Used by storage engines (currently TokuDB and InnoDB) to report that
