@@ -1358,7 +1358,7 @@ void purge_sys_t::resume()
      ut_ad(!srv_undo_sources);
      return;
    }
-
+   rw_lock_x_lock(&latch);
    int32_t paused= m_paused--;
    ut_a(paused);
 
@@ -1369,4 +1369,5 @@ void purge_sys_t::resume()
      srv_purge_wakeup();
      MONITOR_ATOMIC_INC(MONITOR_PURGE_RESUME_COUNT);
    }
+   rw_lock_x_unlock(&latch);
 }
