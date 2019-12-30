@@ -64,6 +64,7 @@ public:
   }
   int delete_table(const char *name);
   int rename_table(const char *from, const char *to);
+  int discover_check_version();
   S3_INFO *s3_open_args() { return open_args; }
   void register_handler(MARIA_HA *file);
 };

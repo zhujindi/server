@@ -7943,3 +7943,10 @@ ER_WARN_HISTORY_ROW_START_TIME
         eng "Table `%s.%s` history row start '%s' is later than row end '%s'"
 ER_PART_STARTS_BEYOND_INTERVAL
         eng "%`s: STARTS is later than query time, first history partition may exceed INTERVAL value"
+ER_SLAVE_IGNORED_SHARED_TABLE
+        eng "Slave SQL thread ignored the '%s' because table is shared"
+        ger "Slave-SQL-Thread hat die Abfrage '%s'"
+        nla "Slave SQL thread negeerde de query '%s'"
+        por "Slave SQL thread ignorado a consulta devido '%s'"
+        spa "Slave SQL thread ignorado el query '%s'"
+        swe "Slav SQL tråden ignorerade '%s' pga tabellen är delad"

@@ -4873,7 +4873,7 @@ mysql_execute_command(THD *thd)
     
     /* DDL and binlog write order are protected by metadata locks. */
     res= mysql_rm_table(thd, first_table, lex->if_exists(), lex->tmp_table(),
-                        lex->table_type == TABLE_TYPE_SEQUENCE);
+                        lex->table_type == TABLE_TYPE_SEQUENCE, 0);
 
     /*
       When dropping temporary tables if @@session_track_state_change is ON

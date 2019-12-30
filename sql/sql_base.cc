@@ -1912,6 +1912,8 @@ bool open_table(THD *thd, TABLE_LIST *table_list, Open_table_context *ot_ctx)
     mdl_ticket= table_list->mdl_request.ticket;
   }
 
+retry_share:
+
   if (table_list->open_strategy == TABLE_LIST::OPEN_IF_EXISTS)
   {
     if (!ha_table_exists(thd, &table_list->db, &table_list->table_name))
@@ -1928,8 +1930,6 @@ bool open_table(THD *thd, TABLE_LIST *table_list, Open_table_context *ot_ctx)
     gts_flags= GTS_VIEW;
   else
     gts_flags= GTS_TABLE | GTS_VIEW;
-
-retry_share:
 
   share= tdc_acquire_share(thd, table_list, gts_flags, &table);
 
@@ -2002,7 +2002,17 @@ retry_share:
 
   if (!(flags & MYSQL_OPEN_IGNORE_FLUSH))
   {
-    if (share->tdc->flushed)
+    bool force_flush= 0;
+    if (table && table->file->discover_check_version())
+    {
+      DBUG_PRINT("error", ("discover_check_version failed"));
+      /*
+        Table definition is out of sync
+        Close all instances of the table and retry
+      */
+      force_flush= 1;
+    }
+    if (share->tdc->flushed || force_flush)
     {
       /*
         We already have an MDL lock. But we have encountered an old
@@ -2017,6 +2027,11 @@ retry_share:
         tc_release_table(table);
       else
         tdc_release_share(share);
+
+      if (force_flush)
+        tdc_remove_table(thd, TDC_RT_REMOVE_UNUSED,
+                         table_list->db.str,
+                         table_list->table_name.str);
 
       MDL_deadlock_handler mdl_deadlock_handler(ot_ctx);
       bool wait_result;

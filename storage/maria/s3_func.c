@@ -823,11 +823,15 @@ my_bool s3_put_object(ms3_st *s3_client, const char *aws_bucket,
 
 /**
    Read an object for index or data information
+
+   @param print_error 0  Don't print error
+   @param print_error 1  Print error that object doesn't exists
+   @param print_error 2  Print error that table doesn't exists
 */
 
 my_bool s3_get_object(ms3_st *s3_client, const char *aws_bucket,
                       const char *name, S3_BLOCK *block,
-                      my_bool compression, my_bool print_error)
+                      my_bool compression, int print_error)
 {
   uint8_t error;
   uchar *data;
@@ -895,9 +899,9 @@ my_bool s3_get_object(ms3_st *s3_client, const char *aws_bucket,
   {
     if (error == 9)
     {
-      my_printf_error(EE_FILENOTFOUND, "Expected object '%s' didn't exist",
+      my_errno= print_error == 1 ? EE_FILENOTFOUND : HA_ERR_NO_SUCH_TABLE;
+      my_printf_error(my_errno, "Expected object '%s' didn't exist",
                       MYF(0), name);
-      my_errno= EE_FILENOTFOUND;
     }
     else
     {
@@ -1355,7 +1359,7 @@ my_bool read_index_header(ms3_st *client, S3_INFO *s3, S3_BLOCK *block)
   DBUG_ENTER("read_index_header");
   strxnmov(aws_path, sizeof(aws_path)-1, s3->database.str, "/", s3->table.str,
            "/aria", NullS);
-  DBUG_RETURN(s3_get_object(client, s3->bucket.str, aws_path, block, 0, 1));
+  DBUG_RETURN(s3_get_object(client, s3->bucket.str, aws_path, block, 0, 2));
 }
 
 
