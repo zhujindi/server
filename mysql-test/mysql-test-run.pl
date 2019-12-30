@@ -4775,8 +4775,9 @@ sub extract_warning_lines ($$) {
      qr/InnoDB: Cannot open .*ib_buffer_pool.* for reading: No such file or directory*/,
      qr/InnoDB: Table .*mysql.*innodb_table_stats.* not found./,
      qr/InnoDB: User stopword table .* does not exist./,
+     qr/WSREP: Failed to guess base node address/,
+     qr/WSREP: Guessing address for incoming client/,
      qr/Dump thread [0-9]+ last sent to server [0-9]+ binlog file:pos .+/
-
     );
 
   my $matched_lines= [];
