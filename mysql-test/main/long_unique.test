@@ -556,4 +556,16 @@ SELECT t2.b FROM t1 JOIN t2 ON t1.d = t2.f WHERE t2.pk >= 20;
 SELECT t2.b FROM t1 JOIN t2 ON t1.d = t2.f WHERE t2.pk >= 20;
 drop table t1,t2;
 
+--echo #
+--echo # Test insert delayed
+--echo #
+
+create table t1(a blob unique) engine=myisam;
+insert delayed into t1 values(1),(2),(3),(56),('sachin'),('maria'),(123456789034567891),(null),(null),(123456789034567890),('maria');
+insert delayed into t1 values(1),(9);
+flush tables t1;
+select count(*) from t1;
+drop table t1;
+
+# Cleanup
 set @@GLOBAL.max_allowed_packet= @allowed_packet;
