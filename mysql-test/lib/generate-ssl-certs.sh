@@ -14,6 +14,8 @@ echo 01 > demoCA/crlnumber
 
 # CA certificate, self-signed
 openssl req -x509 -newkey rsa:2048 -keyout cakey.pem -out cacert.pem -days 7300 -nodes -subj '/CN=cacert/C=FI/ST=Helsinki/L=Helsinki/O=MariaDB' -text
+rm -fv *.0
+cp -v cacert.pem `openssl x509 -in cacert.pem -noout -issuer_hash`.0
 
 # server certificate signing request and private key. Note the very long subject (for MDEV-7859)
 openssl req -newkey rsa:2048 -keyout server-key.pem -out demoCA/server-req.pem -days 7300 -nodes -subj '/CN=localhost/C=FI/ST=state or province within country, in other certificates in this file it is the same as L/L=location, usually an address but often ambiguously used/OU=organizational unit name, a division name within an organization/O=organization name, typically a company name'
@@ -43,6 +45,10 @@ openssl ca -keyfile cakey.pem -extfile demoCA/sanext.conf -days 7300 -batch -cer
 openssl req -newkey rsa:2048 -keyout client-key.pem -out demoCA/client-req.pem -days 7300 -nodes -subj '/CN=client/C=FI/ST=Helsinki/L=Helsinki/O=MariaDB'
 openssl rsa -in client-key.pem -out client-key.pem
 openssl ca -keyfile cakey.pem -days 7300 -batch -cert cacert.pem -policy policy_anything -out client-cert.pem -in demoCA/client-req.pem
+# combined
+cat client-cert.pem client-key.pem > client-certkey.pem
+# password-protected
+openssl rsa -in client-key.pem -out client-key-enc.pem -aes256 -passout pass:qwerty
 
 # generate crls
 openssl ca -revoke server-cert.pem -keyfile cakey.pem -batch -cert cacert.pem

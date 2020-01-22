@@ -1,8 +1,24 @@
--- source include/have_ssl_communication.inc
+--source include/have_ssl_communication.inc
+
+--let $cmd=$MYSQL --ssl -e "SELECT (VARIABLE_VALUE <> '') as have_ssl FROM INFORMATION_SCHEMA.SESSION_STATUS WHERE VARIABLE_NAME='Ssl_cipher'" 2>&1
+
 #
 # Bug#29784 YaSSL assertion failure when reading 8k key.
 #
---exec $MYSQL --connect-timeout=180 --ssl --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem -e "SELECT (VARIABLE_VALUE <> '') as have_ssl FROM INFORMATION_SCHEMA.SESSION_STATUS WHERE VARIABLE_NAME='Ssl_cipher'" 2>&1
+--exec $cmd --ssl-key=$MYSQL_TEST_DIR/std_data/client-key.pem --ssl-cert=$MYSQL_TEST_DIR/std_data/client-cert.pem
 
-##  This test file is for testing encrypted communication only, not other
-##  encryption routines that the SSL library happens to provide!
+#
+# test --ssl-verify-server-cert when the hostname does not match
+#
+
+# no validation
+--exec $cmd
+
+# validation against explicitly specified CA
+--error 1
+--exec $cmd --ssl-verify-server-cert --ssl-ca=$MYSQL_TEST_DIR/std_data/cacert.pem
+
+# validation against system CA
+--let SSL_CERT_DIR=$MYSQL_TEST_DIR/std_data
+--error 1
+--exec $cmd --ssl-verify-server-cert

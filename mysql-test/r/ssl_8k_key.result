@@ -1,2 +1,6 @@
 have_ssl
 1
+have_ssl
+1
+ERROR 2026 (HY000): SSL connection error: Validation of SSL server certificate failed
+ERROR 2026 (HY000): SSL connection error: Validation of SSL server certificate failed

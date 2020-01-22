@@ -23,4 +23,8 @@ create procedure have_ssl()
 --echo mysql --ssl --ssl-verify-server-cert -e "call test.have_ssl()"
 --replace_regex /SSL connection error.*certificate[^\n]*/SSL connection error: Failed to verify the server certificate/
 --exec $MYSQL --ssl --ssl-verify-server-cert -e "call test.have_ssl()" 2>&1
+
+--echo same, using "system" CA
+--let SSL_CERT_DIR=$MYSQL_TEST_DIR/std_data
+--exec $MYSQL --ssl --ssl-verify-server-cert -e "call test.have_ssl()" 2>&1
 drop procedure have_ssl;

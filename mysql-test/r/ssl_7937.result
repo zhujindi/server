@@ -13,4 +13,7 @@ have_ssl
 yes
 mysql --ssl --ssl-verify-server-cert -e "call test.have_ssl()"
 ERROR 2026 (HY000): SSL connection error: Failed to verify the server certificate
+same, using "system" CA
+have_ssl
+yes
 drop procedure have_ssl;
