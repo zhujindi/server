@@ -4874,14 +4874,6 @@ public:
   {
     return false;
   }
-  /*
-    Allow engines that is using discovery to check if versions match
-    Called by open_table() for tables that was in the table definition cache
-  */
-  virtual int discover_check_version()
-  {
-    return 0;
-  }
   /* If the table is using sql level unique constraints on some column */
   bool has_long_unique();
 

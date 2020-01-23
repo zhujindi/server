@@ -480,6 +480,9 @@ int ha_s3::open(const char *name, int mode, uint open_flags)
     open_args= &s3_info;
   }
 
+  if (discover_check_version())
+    DBUG_RETURN(HA_ERR_TABLE_DEF_CHANGED);
+
   if (!(res= ha_maria::open(name, mode, open_flags)))
   {
     if ((open_flags & HA_OPEN_FOR_CREATE))
@@ -659,6 +662,19 @@ int ha_s3::discover_check_version()
   S3_INFO s3_info= *file->s->s3_path;
   s3_info.tabledef_version= table->s->tabledef_version;
   return s3_check_frm_version(file->s3, &s3_info);
+}
+
+
+int ha_s3::rebind()
+{
+  if (auto error= handler::rebind())
+    return error;
+  if (discover_check_version())
+  {
+    handler::unbind_psi();
+    return HA_ERR_TABLE_DEF_CHANGED;
+  }
+  return 0;
 }
 
 
