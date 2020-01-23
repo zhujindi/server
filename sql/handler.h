@@ -3131,7 +3131,7 @@ public:
   PSI_table *m_psi;
 
   virtual void unbind_psi();
-  virtual void rebind_psi();
+  virtual int rebind();
 
   bool set_top_table_fields;
   struct TABLE *top_table;
