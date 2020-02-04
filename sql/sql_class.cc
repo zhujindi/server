@@ -6676,14 +6676,13 @@ int THD::binlog_flush_pending_rows_event(bool stmt_end, bool is_transactional)
   if (Rows_log_event *pending= binlog_get_pending_rows_event(is_transactional))
   {
     if (stmt_end)
-    {
       pending->set_flags(Rows_log_event::STMT_END_F);
-      binlog_table_maps= 0;
-    }
 
     error= mysql_bin_log.flush_and_set_pending_rows_event(this, 0,
                                                           is_transactional);
   }
+  if (stmt_end)
+    binlog_table_maps= 0;
 
   DBUG_RETURN(error);
 }

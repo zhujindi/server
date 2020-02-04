@@ -1,0 +1,26 @@
+# MDEV-21037 assert cache_mngr->trx_cache.empty() in binlog_close_connection
+#  was caused by missed proper cleanup of connection's binlog state under
+# union of conditions: user LOCK on table with trigger + MSTA + SAVEPOINT
+
+--source include/have_innodb.inc
+--source include/have_binlog_format_row.inc
+
+CREATE TABLE t (a INT) ENGINE=InnoDB;
+# for prelocking
+CREATE TRIGGER tr BEFORE UPDATE ON t FOR EACH ROW SET @a = 1;
+# forces skip end of statement cleaup
+LOCK TABLE t WRITE;
+SET AUTOCOMMIT = OFF;
+INSERT INTO t VALUES (1);
+# resets pending event
+SAVEPOINT A;
+# resets per end of statement
+UNLOCK TABLES;
+
+# extra state screwer
+INSERT INTO t VALUES (2);
+
+# cleanup
+# and assert trigger when connection closes
+DROP TABLE t;
+
