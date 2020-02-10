@@ -63,6 +63,7 @@ class TC_LOG
   virtual int unlog(ulong cookie, my_xid xid)=0;
   virtual int unlog_xa_prepare(THD *thd, bool all)= 0;
   virtual void commit_checkpoint_notify(void *cookie)= 0;
+  virtual void execute_xa_for_recovery() {};
 
 protected:
   /*
@@ -708,6 +709,8 @@ public:
   void commit_checkpoint_notify(void *cookie);
   int recover(LOG_INFO *linfo, const char *last_log_name, IO_CACHE *first_log,
               Format_description_log_event *fdle, bool do_xa);
+  bool recover_explicit_xa_prepare();
+
   int do_binlog_recovery(const char *opt_name, bool do_xa_recovery);
 #if !defined(MYSQL_CLIENT)
 
@@ -932,7 +935,7 @@ public:
   mysql_mutex_t* get_binlog_end_pos_lock() { return &LOCK_binlog_end_pos; }
 
   int wait_for_update_binlog_end_pos(THD* thd, struct timespec * timeout);
-
+  void execute_xa_for_recovery();
   /*
     Binlog position of end of the binlog.
     Access to this is protected by LOCK_binlog_end_pos
@@ -945,6 +948,9 @@ public:
   */
   my_off_t binlog_end_pos;
   char binlog_end_pos_file[FN_REFLEN];
+  MEM_ROOT mem_root;
+  char *xa_binlog_checkpoint_name;
+  HASH xa_recover_list;
 };
 
 class Log_event_handler

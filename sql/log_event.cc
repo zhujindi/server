@@ -18,7 +18,7 @@
 
 #include "mariadb.h"
 #include "sql_priv.h"
-
+#include "handler.h"
 #ifndef MYSQL_CLIENT
 #include "unireg.h"
 #include "log_event.h"
@@ -2812,9 +2812,25 @@ XA_prepare_log_event(const char* buf,
   buf += sizeof(temp);
   memcpy(&temp, buf, sizeof(temp));
   m_xid.gtrid_length= uint4korr(&temp);
+  // Todo: validity here and elsewhere checks to be replaced by MDEV-21839 fixes
+  if (m_xid.gtrid_length < 0 || m_xid.gtrid_length > MAXGTRIDSIZE)
+  {
+    m_xid.formatID= -1;
+    return;
+  }
   buf += sizeof(temp);
   memcpy(&temp, buf, sizeof(temp));
   m_xid.bqual_length= uint4korr(&temp);
+  if (m_xid.bqual_length < 0 || m_xid.bqual_length > MAXBQUALSIZE)
+  {
+    m_xid.formatID= -1;
+    return;
+  }
+  if (m_xid.gtrid_length + m_xid.bqual_length > XIDDATASIZE)
+  {
+    m_xid.formatID= -1;
+    return;
+  }
   buf += sizeof(temp);
   memcpy(m_xid.data, buf, m_xid.gtrid_length + m_xid.bqual_length);
 

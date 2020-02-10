@@ -3234,6 +3234,7 @@ public:
                        const Format_description_log_event *description_event);
   ~XA_prepare_log_event() {}
   Log_event_type get_type_code() { return XA_PREPARE_LOG_EVENT; }
+  bool is_valid() const { return m_xid.formatID != -1; }
   int get_data_size()
   {
     return xid_subheader_no_data + m_xid.gtrid_length + m_xid.bqual_length;
@@ -3241,12 +3242,7 @@ public:
 
 #ifdef MYSQL_SERVER
   bool write();
-#endif
-
-private:
-#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
-  char query[sizeof("XA COMMIT ONE PHASE") + 1 + ser_buf_size];
-  int do_commit();
+#ifdef HAVE_REPLICATION
   const char* get_query()
   {
     sprintf(query,
@@ -3254,6 +3250,13 @@ private:
             m_xid.serialize());
     return query;
   }
+#endif /* HAVE_REPLICATION */
+#endif /* MYSQL_SERVER */
+
+private:
+#if defined(MYSQL_SERVER) && defined(HAVE_REPLICATION)
+  char query[sizeof("XA COMMIT ONE PHASE") + 1 + ser_buf_size];
+  int do_commit();
 #endif
 };
 
