@@ -30,6 +30,7 @@
 #include "sql_digest_stream.h"
 
 #include "sql_get_diagnostics.h"
+#include "table_function.h"
 
 /* Generated code */
 #include "sql_yacc.hh"

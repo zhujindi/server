@@ -34,6 +34,7 @@
 #include "sql_tvc.h"
 #include "item.h"
 #include "sql_limit.h"                // Select_limit_counters
+#include "table_function.h"           // Json_table_column
 
 /* Used for flags of nesting constructs */
 #define SELECT_NESTING_MAP_SIZE 64
@@ -3289,6 +3290,8 @@ public:
   SQL_I_List<ORDER> proc_list;
   SQL_I_List<TABLE_LIST> auxiliary_table_list, save_list;
   Column_definition *last_field;
+  Json_table_column *cur_json_table_column, *json_table_column_nest;
+  Table_function_json_table *json_table;
   Item_sum *in_sum_func;
   udf_func udf;
   HA_CHECK_OPT   check_opt;                        // check/repair options
