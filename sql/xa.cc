@@ -529,6 +529,11 @@ bool trans_xa_commit(THD *thd)
   if (!thd->transaction.xid_state.is_explicit_XA() ||
       !thd->transaction.xid_state.xid_cache_element->xid.eq(thd->lex->xid))
   {
+    if (thd->in_multi_stmt_transaction_mode() || thd->lex->xa_opt != XA_NONE)
+    {
+      my_error(ER_XAER_NOTA, MYF(0));
+      DBUG_RETURN(TRUE);
+    }
     if (thd->fix_xid_hash_pins())
     {
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
@@ -623,6 +628,11 @@ bool trans_xa_rollback(THD *thd)
   if (!thd->transaction.xid_state.is_explicit_XA() ||
       !thd->transaction.xid_state.xid_cache_element->xid.eq(thd->lex->xid))
   {
+    if (thd->in_multi_stmt_transaction_mode())
+    {
+      my_error(ER_XAER_NOTA, MYF(0));
+      DBUG_RETURN(TRUE);
+    }
     if (thd->fix_xid_hash_pins())
     {
       my_error(ER_OUT_OF_RESOURCES, MYF(0));
