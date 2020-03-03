@@ -903,7 +903,6 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
       }
       num_records++;
     }
-    tracker->encode_keys_time_tracker.stop_tracking(thd);
 
     /* It does not make sense to read more keys in case of a fatal error */
     if (unlikely(thd->is_error()))
@@ -916,6 +915,8 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
     if (!write_record)
       file->unlock_row();
   }
+  tracker->encode_keys_time_tracker.stop_tracking(thd);
+
   if (!quick_select)
   {
     (void) file->extra(HA_EXTRA_NO_CACHE);	/* End cacheing of records */
