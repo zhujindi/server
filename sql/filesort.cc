@@ -45,13 +45,15 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
                              IO_CACHE *buffer_file,
                              IO_CACHE *tempfile,
                              Bounded_queue<uchar, uchar> *pq,
-                             ha_rows *found_rows);
-static bool write_keys(Sort_param *param, SORT_INFO *fs_info,
-                      uint count, IO_CACHE *buffer_file, IO_CACHE *tempfile);
+                             ha_rows *found_rows,
+                             Filesort_tracker *tracker);
+static bool write_keys(THD *thd, Sort_param *param, SORT_INFO *fs_info,
+                      uint count, IO_CACHE *buffer_file, IO_CACHE *tempfile,
+                      Filesort_tracker *tracker);
 static uint make_sortkey(Sort_param *param, uchar *to, uchar *ref_pos);
 static void register_used_fields(Sort_param *param);
-static bool save_index(Sort_param *param, uint count,
-                       SORT_INFO *table_sort);
+static bool save_index(THD *thd, Sort_param *param, uint count,
+                       SORT_INFO *table_sort, Filesort_tracker *tracker);
 static uint suffix_length(ulong string_length);
 static uint sortlength(THD *thd, SORT_FIELD *sortorder, uint s_length,
                        bool *multi_byte_charset);
@@ -317,7 +319,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
                           &buffpek_pointers,
                           &tempfile, 
                           pq.is_initialized() ? &pq : NULL,
-                          &sort->found_rows);
+                          &sort->found_rows, tracker);
   if (num_rows == HA_POS_ERROR)
     goto err;
 
@@ -327,7 +329,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
 
   if (maxbuffer == 0)			// The whole set is in memory
   {
-    if (save_index(&param, (uint) num_rows, sort))
+    if (save_index(thd, &param, (uint) num_rows, sort, tracker))
       goto err;
   }
   else
@@ -373,6 +375,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
     set_if_bigger(param.max_keys_per_buffer, 1);
     maxbuffer--;				// Offset from 0
 
+    tracker->sort_merge_time_tracker.start_tracking(thd);
     if (merge_many_buff(&param, sort->get_raw_buf(),
                         buffpek,&maxbuffer,
 	                      &tempfile))
@@ -387,6 +390,7 @@ SORT_INFO *filesort(THD *thd, TABLE *table, Filesort *filesort,
                     &tempfile,
                     outfile))
       goto err;
+    tracker->sort_merge_time_tracker.stop_tracking(thd);
   }
 
   if (num_rows > param.max_rows)
@@ -755,7 +759,8 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
 			     IO_CACHE *buffpek_pointers,
                              IO_CACHE *tempfile,
                              Bounded_queue<uchar, uchar> *pq,
-                             ha_rows *found_rows)
+                             ha_rows *found_rows,
+                             Filesort_tracker *tracker)
 {
   int error, quick_select;
   uint idx, indexpos;
@@ -821,6 +826,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
   }
 
   DEBUG_SYNC(thd, "after_index_merge_phase1");
+  tracker->encode_keys_time_tracker.start_tracking(thd);
   for (;;)
   {
     if (quick_select)
@@ -879,10 +885,12 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
       {
         if (fs_info->isfull())
         {
-          if (write_keys(param, fs_info, idx, buffpek_pointers, tempfile))
+          tracker->encode_keys_time_tracker.stop_tracking(thd);
+          if (write_keys(thd, param, fs_info, idx, buffpek_pointers, tempfile, tracker))
             goto err;
           idx= 0;
           indexpos++;
+          tracker->encode_keys_time_tracker.start_tracking(thd);
         }
         if (idx == 0)
           fs_info->init_next_record_pointer();
@@ -895,6 +903,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
       }
       num_records++;
     }
+    tracker->encode_keys_time_tracker.stop_tracking(thd);
 
     /* It does not make sense to read more keys in case of a fatal error */
     if (unlikely(thd->is_error()))
@@ -927,7 +936,7 @@ static ha_rows find_all_keys(THD *thd, Sort_param *param, SQL_SELECT *select,
     DBUG_RETURN(HA_POS_ERROR);
   }
   if (indexpos && idx &&
-      write_keys(param, fs_info, idx, buffpek_pointers, tempfile))
+      write_keys(thd, param, fs_info, idx, buffpek_pointers, tempfile, tracker))
     DBUG_RETURN(HA_POS_ERROR);			/* purecov: inspected */
 
   (*found_rows)= num_records;
@@ -967,8 +976,9 @@ err:
 */
 
 static bool
-write_keys(Sort_param *param,  SORT_INFO *fs_info, uint count,
-           IO_CACHE *buffpek_pointers, IO_CACHE *tempfile)
+write_keys(THD *thd, Sort_param *param,  SORT_INFO *fs_info, uint count,
+           IO_CACHE *buffpek_pointers, IO_CACHE *tempfile,
+           Filesort_tracker *tracker)
 {
   size_t rec_length;
   Merge_chunk buffpek;
@@ -976,7 +986,9 @@ write_keys(Sort_param *param,  SORT_INFO *fs_info, uint count,
 
   rec_length= param->rec_length;
 
+  tracker->sort_time_tracker.start_tracking(thd);
   fs_info->sort_buffer(param, count);
+  tracker->sort_time_tracker.stop_tracking(thd);
 
   if (!my_b_inited(tempfile) &&
       open_cached_file(tempfile, mysql_tmpdir, TEMP_PREFIX, DISK_BUFFER_SIZE,
@@ -1382,15 +1394,17 @@ static void register_used_fields(Sort_param *param)
 }
 
 
-static bool save_index(Sort_param *param, uint count,
-                       SORT_INFO *table_sort)
+static bool save_index(THD *thd, Sort_param *param, uint count,
+                       SORT_INFO *table_sort, Filesort_tracker *tracker)
 {
   uint offset,res_length;
   uchar *to;
   DBUG_ENTER("save_index");
   DBUG_ASSERT(table_sort->record_pointers == 0);
 
+  tracker->sort_time_tracker.start_tracking(thd);
   table_sort->sort_buffer(param, count);
+  tracker->sort_time_tracker.stop_tracking(thd);
 
   if (param->using_addon_fields())
   {

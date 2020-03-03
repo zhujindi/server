@@ -82,6 +82,10 @@ void Filesort_tracker::print_json_members(Json_writer *writer)
 
   get_data_format(&str);
   writer->add_member("r_sort_mode").add_str(str.c_ptr(), str.length());
+
+  writer->add_member("r_time_for_filling_sort_buffer").add_double(encode_keys_time_tracker.get_time_ms());
+  writer->add_member("r_time_for_sorting").add_double(sort_time_tracker.get_time_ms());
+  writer->add_member("r_time_for_sort_merge").add_double(sort_merge_time_tracker.get_time_ms());
 }
 
 void Filesort_tracker::get_data_format(String *str)

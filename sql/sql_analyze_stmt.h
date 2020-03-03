@@ -293,6 +293,11 @@ public:
     else
       return 1.0;
   }
+
+  Exec_time_tracker sort_time_tracker;
+  Exec_time_tracker encode_keys_time_tracker;
+  Exec_time_tracker  sort_merge_time_tracker;
+
 private:
   Time_and_counter_tracker time_tracker;
 
