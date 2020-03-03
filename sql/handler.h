@@ -829,6 +829,10 @@ typedef ulonglong my_xid; // this line is the same as in log_event.h
   @see MYSQL_XID in mysql/plugin.h
 */
 struct xid_t {
+  static const uint32 INVALID_format_id= UINT32_MAX;
+  // Two more values reserved for Todo: MDEV-21777
+  static const uint32 MAX_format_id=     UINT32_MAX - 3;
+
   long formatID;
   long gtrid_length;
   long bqual_length;
@@ -864,8 +868,8 @@ struct xid_t {
     bqual_length= b;
     memcpy(data, d, g+b);
   }
-  bool is_null() const { return formatID == -1; }
-  void null() { formatID= -1; }
+  bool is_null() const { return formatID == INVALID_format_id; }
+  void null() { formatID= INVALID_format_id; }
   my_xid quick_get_my_xid()
   {
     my_xid tmp;

@@ -17542,6 +17542,8 @@ xid:
             MYSQL_YYABORT_UNLESS($1->length() <= MAXGTRIDSIZE && $3->length() <= MAXBQUALSIZE);
             if (unlikely(!(Lex->xid=(XID *)thd->alloc(sizeof(XID)))))
               MYSQL_YYABORT;
+            if ($5 > XID::MAX_format_id)
+              my_yyabort_error((ER_XAER_INVAL, MYF(0), ""));
             Lex->xid->set($5, $1->ptr(), $1->length(), $3->ptr(), $3->length());
           }
         ;

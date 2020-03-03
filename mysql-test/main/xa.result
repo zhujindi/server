@@ -1,4 +1,11 @@
 call mtr.add_suppression("Deadlock found when trying to get lock; try restarting transaction");
+XA START      'btw_may_not_be_empty','', 4294967295;
+ERROR XAE05: XAER_INVAL: Invalid arguments (or unsupported command)
+XA START      'btw_may_not_be_empty','', 4294967293;
+ERROR XAE05: XAER_INVAL: Invalid arguments (or unsupported command)
+XA START      'btw_may_not_be_empty','', 4294967292;
+XA END        'btw_may_not_be_empty','', 4294967292;
+XA ROLLBACK   'btw_may_not_be_empty','', 4294967292;
 drop table if exists t1, t2;
 create table t1 (a int) engine=innodb;
 xa start 'test1';

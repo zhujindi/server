@@ -10,6 +10,22 @@
 
 call mtr.add_suppression("Deadlock found when trying to get lock; try restarting transaction");
 
+# Range of valid formatID of XID's  [ gtrid, bqual [ , formatID ] ]
+# is constrained to max(uint32) - 3.
+# and -1 is an invalid value.
+
+--let $max_uint32 =  `SELECT (1 << 32) - 1`
+--let $max_id =      `SELECT $max_uint32 - 3`
+--let $max_plus_1 = `SELECT $max_id + 1`
+
+--error ER_XAER_INVAL
+--eval XA START      'btw_may_not_be_empty','', $max_uint32
+--error ER_XAER_INVAL
+--eval XA START      'btw_may_not_be_empty','', $max_plus_1
+--eval XA START      'btw_may_not_be_empty','', $max_id
+--eval XA END        'btw_may_not_be_empty','', $max_id
+--eval XA ROLLBACK   'btw_may_not_be_empty','', $max_id
+
 --disable_warnings
 drop table if exists t1, t2;
 --enable_warnings
