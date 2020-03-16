@@ -204,8 +204,8 @@ static char*	innobase_reset_all_monitor_counter;
 
 static ulong	innodb_flush_method;
 
-/** Deprecated; no effect other than issuing a deprecation warning. */
-static char* innodb_file_format;
+/** File format constraint for native ALTER TABLE */
+ulong innodb_file_format;
 /** Deprecated; no effect other than issuing a deprecation warning. */
 static char* innodb_large_prefix;
 
@@ -471,6 +471,23 @@ static TYPELIB innodb_change_buffering_typelib = {
 	array_elements(innodb_change_buffering_names) - 1,
 	"innodb_change_buffering_typelib",
 	innodb_change_buffering_names,
+	NULL
+};
+
+/** Allowed values of innodb_file_format */
+const char* innodb_file_format_names[] = {
+	"barracuda", /* compatible with MariaDB 5.5 to 10.2 */
+	"strict_barracuda", /* force rebuild on ALTER TABLE if needed */
+	"append",/* allow instant ADD COLUMN */
+	"strict_append", /* ditto; but maybe require rebuild in 10.4 */
+	NullS
+};
+
+/** Enumeration of innodb_file_format */
+static TYPELIB innodb_file_format_typelib = {
+	array_elements(innodb_file_format_names) - 1,
+	"innodb_file_format_typelib",
+	innodb_file_format_names,
 	NULL
 };
 
@@ -3701,15 +3718,12 @@ static int innodb_init_params()
 	char		*default_path;
 	ulong		num_pll_degree;
 
-	if (innodb_large_prefix || innodb_file_format) {
-		const char* p = innodb_file_format
-			? "file_format"
-			: "large_prefix";
-		sql_print_warning("The parameter innodb_%s is deprecated"
-				  " and has no effect."
+	if (innodb_large_prefix) {
+		sql_print_warning("The parameter innodb_large_prefix"
+				  " is deprecated and has no effect."
 				  " It may be removed in future releases."
 				  " See https://mariadb.com/kb/en/library/"
-				  "xtradbinnodb-file-format/", p);
+				  "xtradbinnodb-file-format/");
 	}
 
 	/* Check that values don't overflow on 32-bit systems. */
@@ -19313,9 +19327,11 @@ static MYSQL_SYSVAR_ENUM(flush_method, innodb_flush_method,
   NULL, NULL, IF_WIN(SRV_ALL_O_DIRECT_FSYNC, SRV_FSYNC),
   &innodb_flush_method_typelib);
 
-static MYSQL_SYSVAR_STR(file_format, innodb_file_format,
-  PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Deprecated parameter with no effect.", NULL, NULL, NULL);
+static MYSQL_SYSVAR_ENUM(file_format, innodb_file_format,
+  PLUGIN_VAR_RQCMDARG,
+  "File format constraint for native ALTER TABLE", NULL, NULL, 2/*add*/,
+  &innodb_file_format_typelib);
+
 static MYSQL_SYSVAR_STR(large_prefix, innodb_large_prefix,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
   "Deprecated parameter with no effect.", NULL, NULL, NULL);
