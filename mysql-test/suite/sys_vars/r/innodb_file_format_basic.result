@@ -1,0 +1,51 @@
+SET @start_global_value = @@global.innodb_file_format;
+SET GLOBAL innodb_file_format=Barracuda;
+select @@session.innodb_file_format;
+ERROR HY000: Variable 'innodb_file_format' is a GLOBAL variable
+show global variables like 'innodb_file_format';
+Variable_name	Value
+innodb_file_format	barracuda
+show session variables like 'innodb_file_format';
+Variable_name	Value
+innodb_file_format	barracuda
+select * from information_schema.global_variables where variable_name='innodb_file_format';
+VARIABLE_NAME	VARIABLE_VALUE
+INNODB_FILE_FORMAT	barracuda
+select * from information_schema.session_variables where variable_name='innodb_file_format';
+VARIABLE_NAME	VARIABLE_VALUE
+INNODB_FILE_FORMAT	barracuda
+set global innodb_file_format='Antelope';
+ERROR 42000: Variable 'innodb_file_format' can't be set to the value of 'Antelope'
+set global innodb_file_format=1.1;
+ERROR 42000: Incorrect argument type to variable 'innodb_file_format'
+set global innodb_file_format=-1;
+ERROR 42000: Variable 'innodb_file_format' can't be set to the value of '-1'
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+barracuda
+set global innodb_file_format=4;
+ERROR 42000: Variable 'innodb_file_format' can't be set to the value of '4'
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+barracuda
+set global innodb_file_format=3;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+strict_append
+set global innodb_file_format=2;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+append
+set global innodb_file_format=1;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+strict_barracuda
+set global innodb_file_format=0;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+barracuda
+set global innodb_file_format=default;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+append
+SET GLOBAL innodb_file_format = @start_global_value;

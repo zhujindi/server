@@ -59,6 +59,8 @@ Smart ALTER TABLE
 #include "span.h"
 
 using st_::span;
+/** File format constraint for native ALTER TABLE */
+extern ulong innodb_file_format;
 
 static const char *MSG_UNSUPPORTED_ALTER_ONLINE_ON_VIRTUAL_COLUMN=
 			"INPLACE ADD or DROP of virtual columns cannot be "
@@ -1997,6 +1999,31 @@ ha_innobase::check_if_supported_inplace_alter(
 	}
 
 	const char* reason_rebuild = NULL;
+
+	switch (innodb_file_format) {
+	case 0: /* barracuda */
+		if (!(ha_alter_info->handler_flags
+		      & ALTER_ADD_STORED_BASE_COLUMN)) {
+			break;
+		}
+		reason_rebuild = "innodb_file_format=barracuda";
+	innodb_file_format_rebuild_reason:
+		if (ha_alter_info->handler_flags & ALTER_RECREATE_TABLE) {
+			reason_rebuild = NULL;
+		} else {
+			ha_alter_info->handler_flags |= ALTER_RECREATE_TABLE;
+			ha_alter_info->unsupported_reason = reason_rebuild;
+		}
+		break;
+	case 1: /* strict_barracuda */
+		if ((ha_alter_info->handler_flags
+		     & ALTER_ADD_STORED_BASE_COLUMN)
+		    || m_prebuilt->table->is_instant()) {
+			reason_rebuild = "innodb_file_format=strict_barracuda";
+			goto innodb_file_format_rebuild_reason;
+		}
+		break;
+	}
 
 	switch (ha_alter_info->handler_flags & ~INNOBASE_INPLACE_IGNORE) {
 	case ALTER_OPTIONS:

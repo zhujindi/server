@@ -1,6 +1,8 @@
 #
 # MDEV-11369: Instant ADD COLUMN for InnoDB
 #
+SET @saved_format = @@GLOBAL.innodb_file_format;
+SET GLOBAL innodb_file_format = append;
 call mtr.add_suppression("Cannot add field `.*` in table `test`.`.*` because after adding it, the row size is");
 CREATE TABLE t(a INT UNIQUE)ENGINE=InnoDB ROW_FORMAT=COMPACT;
 ALTER TABLE t ADD e INT, ROW_FORMAT=COMPRESSED;
@@ -935,6 +937,29 @@ DROP TABLE t1;
 CREATE TABLE t1 (a INT, b INT, PRIMARY KEY(a,b)) ENGINE=InnoDB ROW_FORMAT=REDUNDANT;
 ALTER TABLE t1 MODIFY b INT FIRST;
 DROP TABLE t1;
+CREATE TABLE t1 (a INT PRIMARY KEY) ENGINE=InnoDB ROW_FORMAT=REDUNDANT;
+INSERT INTO t1 SET a=42;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_append;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = append;
+ALTER TABLE t1 ADD c TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 1, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 0, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+ALTER TABLE t1 MODIFY a INT DEFAULT 0;
+affected rows: 0
+info: Records: 0  Duplicates: 0  Warnings: 0
+ALTER TABLE t1 MODIFY a INT DEFAULT NULL, ALGORITHM=INSTANT;
+DROP TABLE t1;
+SET GLOBAL innodb_file_format = @saved_format;
 CREATE TABLE t1
 (id INT PRIMARY KEY, c2 INT UNIQUE,
 c3 POINT NOT NULL DEFAULT ST_GeomFromText('POINT(3 4)'),
@@ -1815,6 +1840,29 @@ DROP TABLE t1;
 CREATE TABLE t1 (a INT, b INT, PRIMARY KEY(a,b)) ENGINE=InnoDB ROW_FORMAT=COMPACT;
 ALTER TABLE t1 MODIFY b INT FIRST;
 DROP TABLE t1;
+CREATE TABLE t1 (a INT PRIMARY KEY) ENGINE=InnoDB ROW_FORMAT=COMPACT;
+INSERT INTO t1 SET a=42;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_append;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = append;
+ALTER TABLE t1 ADD c TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 1, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 0, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+ALTER TABLE t1 MODIFY a INT DEFAULT 0;
+affected rows: 0
+info: Records: 0  Duplicates: 0  Warnings: 0
+ALTER TABLE t1 MODIFY a INT DEFAULT NULL, ALGORITHM=INSTANT;
+DROP TABLE t1;
+SET GLOBAL innodb_file_format = @saved_format;
 CREATE TABLE t1
 (id INT PRIMARY KEY, c2 INT UNIQUE,
 c3 POINT NOT NULL DEFAULT ST_GeomFromText('POINT(3 4)'),
@@ -2695,13 +2743,37 @@ DROP TABLE t1;
 CREATE TABLE t1 (a INT, b INT, PRIMARY KEY(a,b)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 ALTER TABLE t1 MODIFY b INT FIRST;
 DROP TABLE t1;
+CREATE TABLE t1 (a INT PRIMARY KEY) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
+INSERT INTO t1 SET a=42;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+SET GLOBAL innodb_file_format = strict_append;
+ALTER TABLE t1 ADD b TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = append;
+ALTER TABLE t1 ADD c TEXT, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 1, ALGORITHM=INSTANT;
+SET GLOBAL innodb_file_format = strict_barracuda;
+ALTER TABLE t1 MODIFY a INT DEFAULT 0, ALGORITHM=INSTANT;
+ERROR 0A000: ALGORITHM=INSTANT is not supported. Reason: innodb_file_format=strict_barracuda. Try ALGORITHM=INPLACE
+ALTER TABLE t1 MODIFY a INT DEFAULT 0;
+affected rows: 0
+info: Records: 0  Duplicates: 0  Warnings: 0
+ALTER TABLE t1 MODIFY a INT DEFAULT NULL, ALGORITHM=INSTANT;
+DROP TABLE t1;
+SET GLOBAL innodb_file_format = @saved_format;
 disconnect analyze;
 SELECT variable_value-@old_instant instants
 FROM information_schema.global_status
 WHERE variable_name = 'innodb_instant_alter_column';
 instants
-199
+205
 SET GLOBAL innodb_purge_rseg_truncate_frequency= @saved_frequency;
+SET GLOBAL innodb_file_format = @saved_format;
 #
 # MDEV-18266: Changing an index comment unnecessarily rebuilds index
 #
