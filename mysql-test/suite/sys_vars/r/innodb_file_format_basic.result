@@ -23,11 +23,19 @@ ERROR 42000: Variable 'innodb_file_format' can't be set to the value of '-1'
 select @@global.innodb_file_format;
 @@global.innodb_file_format
 barracuda
-set global innodb_file_format=4;
-ERROR 42000: Variable 'innodb_file_format' can't be set to the value of '4'
+set global innodb_file_format=6;
+ERROR 42000: Variable 'innodb_file_format' can't be set to the value of '6'
 select @@global.innodb_file_format;
 @@global.innodb_file_format
 barracuda
+set global innodb_file_format=5;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+strict_mapped
+set global innodb_file_format=4;
+select @@global.innodb_file_format;
+@@global.innodb_file_format
+mapped
 set global innodb_file_format=3;
 select @@global.innodb_file_format;
 @@global.innodb_file_format
@@ -47,5 +55,5 @@ barracuda
 set global innodb_file_format=default;
 select @@global.innodb_file_format;
 @@global.innodb_file_format
-append
+mapped
 SET GLOBAL innodb_file_format = @start_global_value;

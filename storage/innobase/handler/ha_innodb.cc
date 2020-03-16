@@ -461,8 +461,10 @@ static TYPELIB innodb_change_buffering_typelib = {
 const char* innodb_file_format_names[] = {
 	"barracuda", /* compatible with MariaDB 5.5 to 10.2 */
 	"strict_barracuda", /* force rebuild on ALTER TABLE if needed */
-	"append",/* allow instant ADD COLUMN */
-	"strict_append", /* ditto; but maybe require rebuild in 10.4 */
+	"append",/* allow instant ADD COLUMN at the end */
+	"strict_append", /* ditto; but only in 10.3 compatible format */
+	"mapped",/* allow instant DROP COLUMN or reordering columns */
+	"strict_mapped",/* ditto; but only in 10.4 compatible format */
 	NullS
 };
 
@@ -19028,7 +19030,7 @@ static MYSQL_SYSVAR_ENUM(flush_method, innodb_flush_method,
 
 static MYSQL_SYSVAR_ENUM(file_format, innodb_file_format,
   PLUGIN_VAR_RQCMDARG,
-  "File format constraint for native ALTER TABLE", NULL, NULL, 2/*add*/,
+  "File format constraint for native ALTER TABLE", NULL, NULL, 4/*mapped*/,
   &innodb_file_format_typelib);
 
 static MYSQL_SYSVAR_STR(large_prefix, innodb_large_prefix,

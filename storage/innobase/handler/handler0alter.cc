@@ -2003,7 +2003,9 @@ ha_innobase::check_if_supported_inplace_alter(
 	switch (innodb_file_format) {
 	case 0: /* barracuda */
 		if (!(ha_alter_info->handler_flags
-		      & ALTER_ADD_STORED_BASE_COLUMN)) {
+		      & (ALTER_ADD_STORED_BASE_COLUMN
+			 | ALTER_STORED_COLUMN_ORDER
+			 | ALTER_DROP_STORED_COLUMN))) {
 			break;
 		}
 		reason_rebuild = "innodb_file_format=barracuda";
@@ -2017,12 +2019,28 @@ ha_innobase::check_if_supported_inplace_alter(
 		break;
 	case 1: /* strict_barracuda */
 		if ((ha_alter_info->handler_flags
-		     & ALTER_ADD_STORED_BASE_COLUMN)
+		     & (ALTER_ADD_STORED_BASE_COLUMN
+			| ALTER_STORED_COLUMN_ORDER
+			| ALTER_DROP_STORED_COLUMN))
 		    || m_prebuilt->table->is_instant()) {
 			reason_rebuild = "innodb_file_format=strict_barracuda";
 			goto innodb_file_format_rebuild_reason;
 		}
 		break;
+	case 2: /* append */
+		if (ha_alter_info->handler_flags
+		    & (ALTER_STORED_COLUMN_ORDER | ALTER_DROP_STORED_COLUMN)) {
+			reason_rebuild = "innodb_file_format=append";
+			goto innodb_file_format_rebuild_reason;
+		}
+		break;
+	case 3: /* strict_append */
+		if ((ha_alter_info->handler_flags
+		     & (ALTER_STORED_COLUMN_ORDER | ALTER_DROP_STORED_COLUMN))
+		    || m_prebuilt->table->instant) {
+			reason_rebuild = "innodb_file_format=strict_append";
+			goto innodb_file_format_rebuild_reason;
+		}
 	}
 
 	switch (ha_alter_info->handler_flags & ~INNOBASE_INPLACE_IGNORE) {

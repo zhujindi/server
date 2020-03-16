@@ -18,6 +18,10 @@ set global innodb_file_format=1.1;
 set global innodb_file_format=-1;
 select @@global.innodb_file_format;
 --error ER_WRONG_VALUE_FOR_VAR
+set global innodb_file_format=6;
+select @@global.innodb_file_format;
+set global innodb_file_format=5;
+select @@global.innodb_file_format;
 set global innodb_file_format=4;
 select @@global.innodb_file_format;
 set global innodb_file_format=3;
