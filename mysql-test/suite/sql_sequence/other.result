@@ -300,4 +300,26 @@ update t1 set p_first_name='Yunxi' where p_id=1;
 drop view v2;
 drop table t1,t2;
 drop sequence s1;
+#
+# MDEV-19273:Server crash in MDL_ticket::has_stronger_or_equal_type or
+# Assertion `thd->mdl_context.is_lock_owner(MDL_key::TABLE,
+# table->db.str, table->table_name.str, MDL_SHARED)' failed
+# in mysql_rm_table_no_locks
+#
+CREATE TABLE t1 (a INT);
+CREATE TEMPORARY TABLE tmp (b INT);
+LOCK TABLE t1 READ;
+DROP SEQUENCE tmp;
+ERROR 42S02: Unknown SEQUENCE: 'test.tmp'
+UNLOCK TABLES;
+DROP TABLE t1;
+CREATE TABLE t (a INT);
+CREATE TEMPORARY TABLE s (f INT);
+CREATE SEQUENCE s;
+LOCK TABLE t WRITE;
+DROP SEQUENCE s;
+ERROR 42S02: Unknown SEQUENCE: 'test.s'
+UNLOCK TABLES;
+DROP TABLE s,t;
+DROP SEQUENCE s;
 # End of 10.3 tests
