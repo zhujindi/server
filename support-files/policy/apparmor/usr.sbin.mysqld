@@ -104,7 +104,7 @@
     /usr/bin/perl rix,
     /usr/bin/seq rix,
     /usr/bin/wsrep_sst* rix,
-    /usr/bin/wsrep_sst_common r,
+    /usr/libexec/wsrep_sst_common r,
     /usr/bin/xtrabackup* rix,
     /usr/bin/mariabackup* rix,
     /var/lib/mysql/ r,
