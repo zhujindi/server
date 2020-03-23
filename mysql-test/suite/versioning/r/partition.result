@@ -614,3 +614,14 @@ create table t2 (b int);
 insert into t2 values (1),(2);
 update t1, t2 set a = 1;
 drop table t1, t2;
+#
+# MDEV-20515 multi-update tries to position updated table by null reference
+#
+create or replace table t1 (a int);
+insert into t1 values (0), (1);
+create or replace table t2 (b int) with system versioning
+partition by system_time
+(partition p1 history, partition pn current);
+insert into t2 values (0), (2);
+update t1 left join t2 on a > b set b= 2 order by b;
+drop table t1, t2;
