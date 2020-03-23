@@ -53,7 +53,7 @@ usr/bin/perror
 usr/bin/replace
 usr/bin/resolve_stack_dump
 usr/bin/resolveip
-usr/bin/wsrep_sst_common
+usr/libexec/wsrep_sst_common
 usr/bin/wsrep_sst_mysqldump
 usr/bin/wsrep_sst_rsync
 usr/bin/wsrep_sst_xtrabackup
