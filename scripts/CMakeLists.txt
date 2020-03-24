@@ -313,8 +313,9 @@ ELSE()
     mariadb-access
     mariadb-convert-table-format
     mariadb-find-rows
-    mytop
     mariadb-hotcopy
+    mysql_config
+    mytop
     ${SERVER_SCRIPTS}
     ${WSREP_SCRIPTS}
     ${SYSTEMD_SCRIPTS}
@@ -360,6 +361,11 @@ ELSE()
     # Create symlink
     IF (NOT ${binname} STREQUAL ${file})
       INSTALL_LINK(${file} ${binname} ${INSTALL_BINDIR} ${${file}_COMPONENT})
+    ENDIF()
+
+    # Create an extra symlink for mariadb_config
+    IF (${file} STREQUAL "mysql_config")
+      INSTALL_LINK("mariadb_config" "mariadb-config" ${INSTALL_BINDIR} mariadb_config_component)
     ENDIF()
   ENDFOREACH()
 
