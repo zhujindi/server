@@ -148,8 +148,6 @@ show create table t1;
 --replace_result InnoDB ENGINE MyISAM ENGINE MEMORY ENGINE
 show create table t1;
 --connection master
-
-drop database test;
-create database test;
+drop table t1;
 
 --source include/rpl_end.inc

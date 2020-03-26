@@ -189,6 +189,5 @@ t1	CREATE TABLE `t1` (
  PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'2000-01-01 00:00:00' AUTO_INCREMENT
 PARTITIONS 4
 connection master;
-drop database test;
-create database test;
+drop table t1;
 include/rpl_end.inc
