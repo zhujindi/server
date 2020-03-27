@@ -1,11 +1,12 @@
---- ./mysql-test/suite/versioning/r/partition.result	2020-03-09 23:23:07.407741946 +0300
-+++ ./mysql-test/suite/versioning/r/partition,heap.reject	2020-03-09 23:23:07.311741944 +0300
-@@ -1311,120 +1311,6 @@
- PARTITIONS 7
- unlock tables;
+--- ./mysql-test/suite/versioning/r/partition.result	2020-03-27 20:33:34.131839630 +0300
++++ ./mysql-test/suite/versioning/r/partition,heap.reject	2020-03-27 20:33:56.087840147 +0300
+@@ -1406,129 +1406,6 @@
+ affected rows: 0
  drop procedure sp;
+ affected rows: 0
 -# Complex table
 -set timestamp= unix_timestamp('2000-01-01 00:00:00');
+-affected rows: 0
 -create or replace table t1 (
 -x int primary key auto_increment,
 -t timestamp(6) default '2001-11-11 11:11:11',
@@ -27,6 +28,7 @@
 -partition by system_time interval 1 hour auto_increment (
 -partition p2 history,
 -partition pn current);
+-affected rows: 0
 -show create table t1;
 -Table	Create Table
 -t1	CREATE TABLE `t1` (
@@ -55,8 +57,10 @@
 - PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'2000-01-01 00:00:00' AUTO_INCREMENT
 -(PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
 - PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+-affected rows: 1
 -insert into t1 (x, c, u, i1, i2, i3, ps, pe)
 -values (1, 'cc', 0, 1, 2, 3, '1999-01-01', '2000-01-01');
+-affected rows: 1
 -show create table t1;
 -Table	Create Table
 -t1	CREATE TABLE `t1` (
@@ -86,8 +90,12 @@
 -(PARTITION `p2` HISTORY ENGINE = DEFAULT_ENGINE,
 - PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
 - PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+-affected rows: 1
 -set timestamp= unix_timestamp('2000-01-01 01:00:00');
+-affected rows: 0
 -update t1 set x= x + 8;
+-affected rows: 1
+-info: Rows matched: 1  Changed: 1  Inserted: 1  Warnings: 0
 -show create table t1;
 -Table	Create Table
 -t1	CREATE TABLE `t1` (
@@ -118,6 +126,7 @@
 - PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
 - PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
 - PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+-affected rows: 1
  # Concurrent DML
  set timestamp= unix_timestamp('2000-01-01 00:00:00');
  create or replace table t1 (x int) with system versioning

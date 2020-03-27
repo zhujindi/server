@@ -932,6 +932,8 @@ void vers_add_auto_parts(THD *thd)
   partition_info *save_part_info= thd->work_part_info;
   Query_tables_list save_query_tables;
   Reprepare_observer *save_reprepare_observer= thd->m_reprepare_observer;
+  Diagnostics_area new_stmt_da(thd->query_id, false, true);
+  Diagnostics_area *save_stmt_da= thd->get_stmt_da();
   thd->m_reprepare_observer= NULL;
   thd->lex->reset_n_backup_query_tables_list(&save_query_tables);
   thd->in_sub_stmt|= SUB_STMT_AUTO_HIST;
@@ -950,11 +952,14 @@ void vers_add_auto_parts(THD *thd)
   }
 
   /* NB: mysql_execute_command() can be recursive because of PS/SP.
-      Don't duplicate any processing including error messages. */
+     Don't duplicate any processing including error messages. */
   thd->vers_auto_part_tables.empty();
 
   DBUG_ASSERT(!thd->is_error());
-  thd->get_stmt_da()->reset_diagnostics_area();
+  /* NB: we have to preserve m_affected_rows, m_row_count_func, m_last_insert_id, etc */
+  thd->set_stmt_da(&new_stmt_da);
+  new_stmt_da.set_overwrite_status(true);
+
   DDL_options_st ddl_opts_none;
   ddl_opts_none.init();
   if (open_and_lock_tables(thd, ddl_opts_none, table_list, false, 0))
@@ -1075,11 +1080,7 @@ vers_make_name_err:
   }
 
   if (!thd->transaction.stmt.is_empty())
-  {
-    thd->get_stmt_da()->set_overwrite_status(true);
     trans_commit_stmt(thd);
-    thd->get_stmt_da()->set_overwrite_status(false);
-  }
 
 exit:
   // If we failed with error allow non-processed tables to be processed next time
@@ -1092,6 +1093,9 @@ open_err:
   thd->m_reprepare_observer= save_reprepare_observer;
   thd->lex->restore_backup_query_tables_list(&save_query_tables);
   thd->in_sub_stmt&= ~SUB_STMT_AUTO_HIST;
+  if (!new_stmt_da.is_warning_info_empty())
+    save_stmt_da->copy_sql_conditions_from_wi(thd, new_stmt_da.get_warning_info());
+  thd->set_stmt_da(save_stmt_da);
 }
 
 
