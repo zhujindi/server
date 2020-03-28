@@ -278,8 +278,6 @@ x
 5
 6
 insert into t1 values (7), (8);
-Warnings:
-Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of LIMIT, need more HISTORY partitions
 ### warn about full partition
 delete from t1;
 Warnings:
@@ -366,8 +364,6 @@ insert t1 values (1);
 delete from t1;
 set timestamp=unix_timestamp('2001-02-04 10:20:50');
 insert t1 values (2);
-Warnings:
-Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of INTERVAL, need more HISTORY partitions
 delete from t1;
 Warnings:
 Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of INTERVAL, need more HISTORY partitions
@@ -585,8 +581,6 @@ partition by system_time interval 1 day starts '2000-01-01 00:00:00'
 partitions 3;
 # we are warned when we push to present:
 insert into t1 values (0);
-Warnings:
-Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p1`) is out of INTERVAL, need more HISTORY partitions
 set timestamp= unix_timestamp('2001-01-01 00:00:01');
 update t1 set i= i + 1;
 Warnings:
@@ -1070,8 +1064,21 @@ t1	CREATE TABLE `t1` (
  PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
 PARTITIONS 2
 affected rows: 1
+# INSERT does not generate history, doesn't do rotation, nor auto-creation
 insert into t1 values (1);
 affected rows: 1
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `x` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
+PARTITIONS 2
+affected rows: 1
+# UPDATE generates history, does rotation and auto-creation
+update t1 set x= x;
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1097,6 +1104,9 @@ set timestamp= unix_timestamp('2000-01-01 00:00:00');
 affected rows: 0
 insert into t1 values (1);
 affected rows: 1
+update t1 set x= x;
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1150,8 +1160,23 @@ t1	CREATE TABLE `t1` (
  PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
  PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
 affected rows: 1
-insert into t1 values (1);
+# INSERT-SELECT does not generate history, doesn't do rotation, nor auto-creation
+insert into t1 select 1;
 affected rows: 1
+info: Records: 1  Duplicates: 0  Warnings: 0
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `x` int(11) DEFAULT NULL
+) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
+ PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'2000-01-01 00:00:00' AUTO_INCREMENT
+(PARTITION `p1` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `p3` HISTORY ENGINE = DEFAULT_ENGINE,
+ PARTITION `pn` CURRENT ENGINE = DEFAULT_ENGINE)
+affected rows: 1
+update t1 set x= x;
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1227,6 +1252,9 @@ create or replace view v1 as select * from t1;
 affected rows: 0
 insert into v1 values (1);
 affected rows: 1
+update t1 set x= x;
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1319,8 +1347,11 @@ affected rows: 0
 create or replace table t1 (x int) with system versioning
 partition by system_time interval 1 hour auto_increment;
 affected rows: 0
-execute immediate 'insert into t1 values (1)';
+insert into t1 values (1);
 affected rows: 1
+execute immediate 'update t1 set x= x';
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1463,6 +1494,9 @@ affected rows: 1
 insert into t1 (x, c, u, i1, i2, i3, ps, pe)
 values (1, 'cc', 0, 1, 2, 3, '1999-01-01', '2000-01-01');
 affected rows: 1
+update t1 set x= x;
+affected rows: 0
+info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
@@ -1534,6 +1568,7 @@ set timestamp= unix_timestamp('2000-01-01 00:00:00');
 create or replace table t1 (x int) with system versioning
 partition by system_time interval 1 hour auto_increment;
 insert into t1 values (1);
+update t1 set x= x;
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (

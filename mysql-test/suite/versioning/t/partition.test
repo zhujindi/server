@@ -875,7 +875,12 @@ partition by system_time limit 1000 auto_increment;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
+--echo # INSERT does not generate history, doesn't do rotation, nor auto-creation
 insert into t1 values (1);
+--replace_result $default_engine DEFAULT_ENGINE
+show create table t1;
+--echo # UPDATE generates history, does rotation and auto-creation
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -888,6 +893,7 @@ show create table t1;
 
 set timestamp= unix_timestamp('2000-01-01 00:00:00');
 insert into t1 values (1);
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -911,7 +917,11 @@ partition by system_time interval 1 hour auto_increment (
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
-insert into t1 values (1);
+--echo # INSERT-SELECT does not generate history, doesn't do rotation, nor auto-creation
+insert into t1 select 1;
+--replace_result $default_engine DEFAULT_ENGINE
+show create table t1;
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -939,6 +949,7 @@ partition by system_time interval 1 hour auto_increment;
 create or replace view v1 as select * from t1;
 
 insert into v1 values (1);
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -984,7 +995,8 @@ set timestamp= unix_timestamp('2000-01-01 00:00:00');
 create or replace table t1 (x int) with system versioning
 partition by system_time interval 1 hour auto_increment;
 
-execute immediate 'insert into t1 values (1)';
+insert into t1 values (1);
+execute immediate 'update t1 set x= x';
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -1045,6 +1057,7 @@ show create table t1;
 
 insert into t1 (x, c, u, i1, i2, i3, ps, pe)
 values (1, 'cc', 0, 1, 2, 3, '1999-01-01', '2000-01-01');
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 
@@ -1061,6 +1074,7 @@ create or replace table t1 (x int) with system versioning
 partition by system_time interval 1 hour auto_increment;
 
 insert into t1 values (1);
+update t1 set x= x;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 

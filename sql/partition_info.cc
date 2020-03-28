@@ -818,6 +818,13 @@ bool partition_info::has_unique_name(partition_element *element)
 */
 void partition_info::vers_set_hist_part(THD *thd)
 {
+  // Skip non-versioned DML; INSERT does not generate history as well.
+  if (part_type != VERSIONING_PARTITION ||
+    thd->lex->sql_command == SQLCOM_SELECT ||
+    thd->lex->sql_command == SQLCOM_INSERT ||
+    thd->lex->sql_command == SQLCOM_INSERT_SELECT)
+    return;
+
   if (vers_info->limit)
   {
     DBUG_ASSERT(!vers_info->interval.is_set());

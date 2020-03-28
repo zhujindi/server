@@ -1,6 +1,6 @@
---- ./mysql-test/suite/versioning/r/partition.result	2020-03-27 20:33:34.131839630 +0300
-+++ ./mysql-test/suite/versioning/r/partition,heap.reject	2020-03-27 20:33:56.087840147 +0300
-@@ -1406,129 +1406,6 @@
+--- ./mysql-test/suite/versioning/r/partition.result	2020-03-28 21:45:02.623821378 +0300
++++ ./mysql-test/suite/versioning/r/partition,heap.reject	2020-03-28 21:46:05.663822860 +0300
+@@ -1437,132 +1437,6 @@
  affected rows: 0
  drop procedure sp;
  affected rows: 0
@@ -61,6 +61,9 @@
 -insert into t1 (x, c, u, i1, i2, i3, ps, pe)
 -values (1, 'cc', 0, 1, 2, 3, '1999-01-01', '2000-01-01');
 -affected rows: 1
+-update t1 set x= x;
+-affected rows: 0
+-info: Rows matched: 1  Changed: 0  Inserted: 0  Warnings: 0
 -show create table t1;
 -Table	Create Table
 -t1	CREATE TABLE `t1` (
